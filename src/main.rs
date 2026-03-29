@@ -4,6 +4,7 @@ use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
+use std::collections::HashMap;
 
 // --- СТРУКТУРЫ ДАННЫХ ---
 
@@ -85,6 +86,7 @@ async fn send_to_telegram(message: String) {
 struct Blockchain {
     chain: Vec<Block>,
     pending_transactions: Vec<Transaction>,
+    last_rewards: HashMap<String, i64>,
 }
 
 impl Blockchain {
@@ -93,6 +95,7 @@ impl Blockchain {
         Blockchain {
             chain: vec![genesis_block],
             pending_transactions: vec![],
+            last_rewards: HashMap::new(),
         }
     }
 
@@ -123,9 +126,31 @@ impl Blockchain {
         }
         balance
     }
+
+    async fn claim_daily_reward(&mut self, address: String) -> Result<String, String> {
+        let now = Utc::now().timestamp();
+        let day_in_seconds = 86400; // 24 часа в секундах
+
+        // Проверяем по нашей "базе" HashMap
+        if let Some(last_time) = self.last_rewards.get(&address) {
+            if now - last_time < day_in_seconds {
+                let wait_time = day_in_seconds - (now - last_time);
+                return Err(format!("Рано! Приходи через {} сек.", wait_time));
+            }
+        }
+
+        // Обновляем время и даем монеты
+        self.last_rewards.insert(address.clone(), now);
+        self.add_transaction("Mew_System".to_string(), address.clone(), 10.0);
+        
+        self.mine_pending_transactions().await;
+        Ok(format!("10 MEW зачислены на {}", address))
+    
+    }
+
     async fn mine_pending_transactions(&mut self) {
         let previous_hash = self.chain.last().unwrap().hash.clone();
-        let mut new_block = Block::new(
+        let new_block = Block::new(
             self.chain.len() as u32,
             self.pending_transactions.clone(),
             previous_hash,
@@ -186,14 +211,11 @@ async fn get_balance_api(data: web::Data<AppState>, path: web::Path<String>) -> 
 // Отправка монет с комиссией 3% (Страница 5 MewWallet)
 #[post("/send")]
 async fn send_coins_api(data: web::Data<AppState>, tx: web::Json<Transaction>) -> impl Responder {
-    // 1. ОТКРЫВАЕМ СКОБКУ: Начинаем работу с данными
     {
-        let mut bc = data.blockchain.lock().unwrap(); // ЗАМОК ЗАКРЫТ 🔒
-
+        let mut bc = data.blockchain.lock().unwrap();
         let commission = tx.amount * 0.03;
         let total_needed = tx.amount + commission;
 
-        // Проверяем баланс
         if bc.get_balance(&tx.sender) < total_needed {
             return HttpResponse::BadRequest().json(serde_json::json!({
                 "error": "Insufficient funds",
@@ -201,21 +223,27 @@ async fn send_coins_api(data: web::Data<AppState>, tx: web::Json<Transaction>) -
             }));
         }
 
-        // Записываем транзакции в "очередь" (pending_transactions)
         bc.add_transaction(tx.sender.clone(), tx.receiver.clone(), tx.amount);
         bc.add_transaction(tx.sender.clone(), "Mew_Treasury".to_string(), commission);
+    }
 
-        // Тут работа со списком транзакций окончена
-    } // 2. ЗАКРЫВАЕМ СКОБКУ: Rust видит это и говорит: "Ок, отпускаю замок!" ЗАМОК ОТКРЫТ 🔓
-
-    // 3. Теперь, когда блокчейн СВОБОДЕН для других запросов, мы можем спокойно майнить.
-    // Для майнинга нам СНОВА нужно на секунду зайти в блокчейн.
     {
-        let mut bc = data.blockchain.lock().unwrap(); // Снова на секунду зашли 🔒
-        bc.mine_pending_transactions().await; // Ждем майнинга и отправки в Telegram
-    } // Снова вышли и все разблокировали 🔓
+        let mut bc = data.blockchain.lock().unwrap();
+        bc.mine_pending_transactions().await;
+    }
 
     HttpResponse::Ok().json(serde_json::json!({"status": "Success"}))
+}
+
+#[get("/reward/{address}")]
+async fn get_daily_reward(data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
+    let address = path.into_inner();
+    let mut bc = data.blockchain.lock().unwrap(); //
+
+    match bc.claim_daily_reward(address).await {
+        Ok(msg) => HttpResponse::Ok().json(serde_json::json!({"status": "Success", "message": msg})),
+        Err(err) => HttpResponse::BadRequest().json(serde_json::json!({"status": "Error", "message": err})),
+    }
 }
 
 // Просмотр всей цепочки (для отладки)
@@ -243,6 +271,7 @@ async fn main() -> std::io::Result<()> {
             .service(get_balance_api)
             .service(send_coins_api)
             .service(get_chain)
+            .service(get_daily_reward)
     })
     .bind(("127.0.0.1", 8080))?
     .run()

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MewWallet — Welcome</title>
+    <style>
+        :root {
+            --accent: #a855f7;
+            --bg: #000000;
+            --text: #ffffff;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0; padding: 0; background-color: var(--bg);
+            color: var(--text); font-family: 'Inter', -apple-system, sans-serif;
+            display: flex; justify-content: center; align-items: center; min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-shell {
+            width: 100%; max-width: 420px; height: 100vh;
+            display: flex; flex-direction: column; padding: 40px 25px;
+        }
+
+        .content { margin-top: auto; margin-bottom: 40px; text-align: left; }
+
+        .logo {
+            font-size: 70px; margin-bottom: 20px;
+            filter: drop-shadow(0 0 15px rgba(168, 85, 247, 0.4));
+        }
+
+        h1 { font-size: 42px; font-weight: 800; margin: 0; line-height: 1.1; letter-spacing: -1px; }
+        p { font-size: 18px; color: #888; margin: 15px 0 40px 0; }
+
+        .buttons-group { display: flex; flex-direction: column; gap: 15px; }
+
+        .btn {
+            display: block; width: 100%; padding: 20px; border-radius: 20px;
+            font-size: 18px; font-weight: 700; text-decoration: none;
+            text-align: center; transition: all 0.2s ease;
+        }
+
+        .btn-create {
+            background-color: var(--accent); color: #fff;
+            box-shadow: 0 10px 25px rgba(168, 85, 247, 0.3);
+        }
+
+        .btn-import { background-color: transparent; color: #fff; border: 2px solid #222; }
+        .btn:active { transform: scale(0.97); opacity: 0.9; }
+
+        /* Плавное появление, чтобы не было мерцания при редиректе */
+        body { opacity: 0; transition: opacity 0.3s; }
+        body.loaded { opacity: 1; }
+    </style>
+</head>
+<body>
+
+    <div class="app-shell">
+        <div class="content">
+            <div class="logo">🐾</div>
+            <h1>Welcome</h1>
+            <p>Let's start the cryptomania!</p>
+            
+            <div class="buttons-group">
+                <a href="createWallet.html" class="btn btn-create">Create Wallet</a>
+                <a href="importWallet.html" class="btn btn-import">Import Wallet</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Тот же механизм проверки, что мы внедрили в другие страницы
+        const MewVault = {
+            salt: "mew_v1_",
+            get: (key) => {
+                const stored = localStorage.getItem(key);
+                if (!stored) return null;
+                try {
+                    return atob(stored).replace(MewVault.salt, "");
+                } catch(e) {
+                    return null;
+                }
+            }
+        };
+
+        // Проверяем наличие аккаунта ДО того, как пользователь увидит интерфейс
+        function checkAuth() {
+            const hasAddress = MewVault.get('mew_address');
+            
+            if (hasAddress) {
+                // Если кошелек найден — летим в личный кабинет
+                window.location.replace('mainWallet.html');
+            } else {
+                // Если пусто — показываем приветствие
+                document.body.classList.add('loaded');
+            }
+        }
+
+        // Запуск проверки
+        checkAuth();
+    </script>
+</body>
+</html>

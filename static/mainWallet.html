@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MewWallet — Dashboard</title>
+    <style>
+        :root {
+            --accent: #a855f7;
+            --accent-light: #c084fc;
+            --bg: #000000;
+            --card: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.1);
+            --text: #ffffff;
+            --text-dim: #a1a1aa;
+        }
+
+        * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+        
+        body { 
+            margin: 0; padding: 0; background: var(--bg); 
+            color: var(--text); font-family: 'Inter', -apple-system, sans-serif;
+            display: flex; justify-content: center; min-height: 100vh;
+        }
+
+        .app-shell {
+            width: 100%; max-width: 420px; background: radial-gradient(circle at top right, #1a1033 0%, #000000 40%);
+            min-height: 100vh; display: flex; flex-direction: column;
+            padding: 20px; position: relative;
+        }
+
+        /* Верхняя панель с адресом */
+        .top-nav {
+            display: flex; justify-content: center; margin-bottom: 40px; margin-top: 10px;
+        }
+        .address-pill {
+            background: var(--card);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--accent-light);
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Баланс */
+        .main-balance {
+            text-align: center; margin-bottom: 45px;
+        }
+        .balance-label {
+            color: var(--text-dim); font-size: 14px; font-weight: 500;
+            letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;
+        }
+        .balance-amount {
+            font-size: 56px; font-weight: 900; letter-spacing: -2px;
+            background: linear-gradient(to bottom, #fff 60%, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0;
+        }
+
+        /* Сетка кнопок */
+        .action-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+            margin-bottom: 45px;
+        }
+        .action-item {
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+            cursor: pointer; text-decoration: none;
+        }
+        .icon-box {
+            width: 64px; height: 64px; background: var(--card);
+            border: 1px solid var(--border); border-radius: 22px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(5px);
+        }
+        .icon-box img { width: 30px; height: 30px; }
+        .action-item:hover .icon-box { border-color: var(--accent); transform: translateY(-3px); }
+        .action-label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+
+        /* Список токенов */
+        .tokens-section { flex-grow: 1; }
+        .section-header { 
+            font-size: 19px; font-weight: 800; margin-bottom: 20px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        
+        .token-item {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 18px;
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px;
+            backdrop-filter: blur(10px);
+        }
+        .token-left { display: flex; align-items: center; gap: 14px; }
+        .token-img { width: 44px; height: 44px; border-radius: 14px; }
+        .token-name { font-weight: 700; font-size: 16px; display: block; }
+        .token-symbol { color: var(--text-dim); font-size: 12px; }
+        
+        .token-right { text-align: right; }
+        .token-val { font-weight: 800; font-size: 16px; }
+        .token-usd { color: #22c55e; font-size: 13px; font-weight: 600; }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-shell">
+        <div class="top-nav">
+            <div class="address-pill" id="user-address" onclick="copyAddr()">
+                Mew...7a2b
+            </div>
+        </div>
+
+        <div class="main-balance">
+            <div class="balance-label">Total Portfolio</div>
+            <h1 class="balance-amount" id="total-usd">$0.00</h1>
+        </div>
+
+        <div class="action-grid">
+            <a href="send.html" class="action-item">
+                <div class="icon-box"><img src="img/sent.png"></div>
+                <span class="action-label">Send</span>
+            </a>
+            <a href="receive.html" class="action-item">
+                <div class="icon-box"><img src="img/get.png"></div>
+                <span class="action-label">Receive</span>
+            </a>
+            <a href="staking.html" class="action-item">
+                <div class="icon-box"><img src="img/staking.png"></div>
+                <span class="action-label">Earn</span>
+            </a>
+            <a href="other.html" class="action-item">
+                <div class="icon-box"><img src="img/other.png"></div>
+                <span class="action-label">Earn</span>
+            </a>
+        </div>
+
+        <div class="tokens-section">
+            <div class="section-header">Assets</div>
+            
+            <div class="token-item">
+                <div class="token-left">
+                    <img src="img/mewTokenIcon.png" class="token-img">
+                    <div>
+                        <span class="token-name">MewCoin</span>
+                        <span class="token-symbol">MEW</span>
+                    </div>
+                </div>
+                <div class="token-right">
+                    <div class="token-val" id="mew-count">0.00</div>
+                    <div class="token-usd" id="mew-usd">+$0.00</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+        let address = localStorage.getItem('mew_address') || "Mew_Unknown_User";
+
+        // Показываем адрес красиво: Mew...7a2b
+        function formatAddress(addr) {
+            if(addr.length < 10) return addr;
+            return addr.substring(0, 5) + '...' + addr.substring(addr.length - 4);
+        }
+        document.getElementById('user-address').innerText = formatAddress(address);
+
+        async function updateData() {
+            try {
+                const res = await fetch(`${API_URL}/balance/${address}`);
+                const data = await res.json();
+                
+                const bal = parseFloat(data.balance);
+                const usd = bal * 0.12; // Представим курс $0.12
+
+                document.getElementById('mew-count').innerText = bal.toFixed(2) + ' MEW';
+                document.getElementById('mew-usd').innerText = '+$' + usd.toFixed(2);
+                document.getElementById('total-usd').innerText = '$' + usd.toFixed(2);
+            } catch (e) { console.log("Offline or server error"); }
+        }
+
+        function copyAddr() {
+            navigator.clipboard.writeText(address);
+            alert("Address copied!");
+        }
+
+        updateData();
+        setInterval(updateData, 5000);
+    </script>
+</body>
+</html> 

@@ -5,12 +5,18 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 use std::collections::HashMap;
+use actix_cors::Cors;
+use actix_files::Files;
+use dotenv::dotenv; 
+use lazy_static::lazy_static; 
 
 // --- СТРУКТУРЫ ДАННЫХ ---
 
-// Вместо прямого текста используем std::env
-let tg_token = std::env::var("TG_BOT_TOKEN").expect("TG_BOT_TOKEN not set");
-let tg_chat = std::env::var("TG_CHAT_ID").expect("TG_CHAT_ID not set");
+lazy_static! {
+    // Используем полный путь std::env::var прямо внутри макроса
+    static ref TG_BOT_TOKEN: String = std::env::var("TG_BOT_TOKEN").unwrap_or_else(|_| "NOT_SET".to_string());
+    static ref TG_CHAT_ID: String = std::env::var("TG_CHAT_ID").unwrap_or_else(|_| "NOT_SET".to_string());
+}
 const APY: f64 = 0.07; // 7% годовых
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -66,12 +72,14 @@ impl Block {
 
 // --- ОТПРАВКА В ТЕЛЕГРАМ ---
 async fn send_to_telegram(message: String) {
-    let url = format!("https://api.telegram.org/bot{}/sendMessage", TG_BOT_TOKEN);
+    // Добавляем * перед TG_BOT_TOKEN
+    let url = format!("https://api.telegram.org/bot{}/sendMessage", *TG_BOT_TOKEN);
     let client = reqwest::Client::new();
     let res = client
         .post(url)
         .json(&serde_json::json!({
-            "chat_id": TG_CHAT_ID,
+            // Добавляем * перед TG_CHAT_ID
+            "chat_id": *TG_CHAT_ID,
             "text": message,
             "parse_mode": "Markdown"
         }))
@@ -79,8 +87,8 @@ async fn send_to_telegram(message: String) {
         .await;
 
     match res {
-        Ok(_) => println!("✅ Блок отправлен в Telegram"),
-        Err(e) => eprintln!("❌ Ошибка отправки в ТГ: {}", e),
+        Ok(_) => println!("✅ Block report sent to Telegram"),
+        Err(e) => eprintln!("❌ Telegram error: {}", e),
     }
 }
 
@@ -295,23 +303,31 @@ async fn submit_nonce(data: web::Data<AppState>, info: web::Json<serde_json::Val
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok(); 
+
     let app_state = web::Data::new(AppState {
         blockchain: Mutex::new(Blockchain::new()),
     });
 
-    println!("🐾 MewChain Node запущен!");
-    println!("URL: http://127.0.0.1:8080");
+    println!("🐾 MewWallet Server starting on http://0.0.0.0:8080");
 
     HttpServer::new(move || {
+        // Настройка разрешений, чтобы фронтенд мог общаться с бэкендом
+        let cors = Cors::permissive(); 
+
         App::new()
+            .wrap(cors)
             .app_data(app_state.clone())
+            // Сначала регистрируем API
             .service(create_wallet)
             .service(get_balance_api)
             .service(send_coins_api)
             .service(get_chain)
             .service(get_daily_reward)
+            .service(submit_nonce)
+            .service(Files::new("/", "./static").index_file("index.html"))
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))? // Важно для Codespaces!
     .run()
     .await
 }

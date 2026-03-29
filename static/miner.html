@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MewWallet — Real Miner</title>
+    <style>
+        :root {
+            --accent: #a855f7;
+            --bg: #000000;
+            --card: #121212;
+            --border: rgba(255, 255, 255, 0.1);
+            --text: #ffffff;
+            --text-dim: #888;
+            --green: #22c55e;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            margin: 0; padding: 0; background-color: var(--bg); 
+            color: var(--text); font-family: 'Inter', -apple-system, sans-serif;
+            display: flex; justify-content: center; min-height: 100vh;
+        }
+
+        .app-shell {
+            width: 100%; max-width: 420px; 
+            display: flex; flex-direction: column; padding: 25px;
+            background: radial-gradient(circle at top left, #1a1033 0%, #000000 70%);
+        }
+
+        .header { display: flex; align-items: center; margin-bottom: 25px; }
+        .back-btn { color: var(--accent); text-decoration: none; font-weight: bold; font-size: 20px; margin-right: 15px; }
+        h1 { font-size: 24px; font-weight: 800; margin: 0; }
+
+        .config-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 24px; padding: 20px; margin-bottom: 20px;
+        }
+        .label { color: var(--text-dim); font-size: 11px; text-transform: uppercase; margin-bottom: 8px; display: block; letter-spacing: 1px; }
+        
+        .address-input {
+            width: 100%; background: #000; border: 1px solid var(--border);
+            border-radius: 14px; padding: 15px; color: var(--accent);
+            font-family: 'JetBrains Mono', monospace; font-size: 13px; outline: none;
+        }
+
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .stat-box { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 18px; text-align: center; }
+        .stat-value { font-size: 20px; font-weight: 800; color: var(--accent); margin-top: 5px; font-family: 'JetBrains Mono', monospace; }
+        .stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+
+        .btn-start {
+            width: 100%; padding: 22px; border-radius: 24px; font-size: 18px;
+            font-weight: 800; border: none; cursor: pointer; transition: 0.3s;
+            background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%); color: #fff;
+            box-shadow: 0 10px 25px rgba(168, 85, 247, 0.3);
+        }
+        .btn-start.active { background: #ef4444; box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3); }
+
+        .status-text { text-align: center; color: var(--text-dim); font-size: 13px; margin-top: 15px; min-height: 1.4em;}
+    </style>
+</head>
+<body>
+
+    <div class="app-shell">
+        <div class="header">
+            <a href="mainWallet.html" class="back-btn">←</a>
+            <h1>Mew Miner</h1>
+        </div>
+
+        <div class="config-card">
+            <span class="label">Mining Address</span>
+            <input type="text" id="miner-address" class="address-input" placeholder="Mew_address...">
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box" style="grid-column: span 2;">
+                <div class="stat-label">Скорость</div>
+                <div id="hash-rate" class="stat-value">0 H/s</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Всего хэшей</div>
+                <div id="total-hashes" class="stat-value">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Активные блоки</div>
+                <div id="total-blocks" class="stat-value" style="color: var(--green);">0</div>
+            </div>
+        </div>
+
+        <button id="start-btn" class="btn-start" onclick="toggleMining()">Начать майнинг</button>
+        <div class="status-text" id="status-text">Готов к работе</div>
+    </div>
+
+    <script id="worker-script" type="text/javascript-worker">
+        self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js');
+
+        let isMining = false;
+
+        self.onmessage = function(e) {
+            if (e.data.type === 'START') {
+                isMining = true;
+                mine(e.data.blockData);
+            } else if (e.data.type === 'STOP') {
+                isMining = false;
+            }
+        };
+
+        function mine(blockData) {
+            let nonce = Math.floor(Math.random() * 1000000000);
+            let lastUpdate = Date.now();
+            let hashesSinceUpdate = 0;
+
+            const txData = JSON.stringify(blockData.transactions);
+            const prefix = blockData.index + blockData.timestamp + txData + blockData.previous_hash;
+
+            while (isMining) {
+                nonce++;
+                hashesSinceUpdate++;
+
+                // Формат хеширования как в Rust: index + timestamp + tx_data + previous_hash + nonce
+                const hash = CryptoJS.SHA256(prefix + nonce).toString();
+
+                if (hash.startsWith("00")) {
+                    self.postMessage({ type: 'SOLUTION', nonce: nonce, hash: hash });
+                    isMining = false;
+                    break;
+                }
+
+                if (Date.now() - lastUpdate > 1000) {
+                    self.postMessage({ type: 'PROGRESS', hashes: hashesSinceUpdate });
+                    hashesSinceUpdate = 0;
+                    lastUpdate = Date.now();
+                }
+            }
+        }
+    </script>
+
+    <script>
+        // Инициализация воркера из тега script
+        const workerBlob = new Blob([document.getElementById('worker-script').textContent], { type: 'text/javascript' });
+        let minerWorker;
+
+        let isMining = false;
+        let totalHashes = 0;
+        let blocksFound = 0;
+
+        const addrInput = document.getElementById('miner-address');
+        addrInput.value = localStorage.getItem('mew_address') || "";
+
+        function toggleMining() {
+            if (!addrInput.value) return alert("Введите адрес!");
+            
+            isMining = !isMining;
+            const btn = document.getElementById('start-btn');
+            const statusText = document.getElementById('status-text');
+
+            if (isMining) {
+                btn.innerText = "Остановить";
+                btn.classList.add('active');
+                statusText.innerText = "Подключение к MewChain...";
+                startProcess();
+            } else {
+                btn.innerText = "Начать майнинг";
+                btn.classList.remove('active');
+                statusText.innerText = "Остановлено.";
+                if (minerWorker) minerWorker.postMessage({ type: 'STOP' });
+                document.getElementById('hash-rate').innerText = "0 H/s";
+            }
+        }
+
+        async function startProcess() {
+            try {
+                // Получаем текущую цепочку для актуального previous_hash
+                const chainRes = await fetch('/chain');
+                const chain = await chainRes.json();
+                const lastBlock = chain[chain.length - 1];
+
+                const blockData = {
+                    index: chain.length,
+                    timestamp: Math.floor(Date.now() / 1000),
+                    transactions: [], // В текущем Rust бэкенде pending_tx не отдаются отдельно
+                    previous_hash: lastBlock.hash
+                };
+
+                document.getElementById('status-text').innerText = `Майнинг блока #${blockData.index}...`;
+
+                if (!minerWorker) {
+                    minerWorker = new Worker(URL.createObjectURL(workerBlob));
+                    minerWorker.onmessage = (e) => {
+                        if (e.data.type === 'PROGRESS') {
+                            totalHashes += e.data.hashes;
+                            document.getElementById('total-hashes').innerText = totalHashes.toLocaleString();
+                            document.getElementById('hash-rate').innerText = e.data.hashes.toLocaleString() + " H/s";
+                        } else if (e.data.type === 'SOLUTION') {
+                            submitSolution(e.data.nonce);
+                        }
+                    };
+                }
+
+                minerWorker.postMessage({ type: 'START', blockData: blockData });
+            } catch (e) {
+                document.getElementById('status-text').innerText = "Ошибка связи с сервером.";
+                isMining = false;
+                toggleMining();
+            }
+        }
+
+        async function submitSolution(nonce) {
+            const statusText = document.getElementById('status-text');
+            statusText.innerText = "⏳ Найдено! Отправка на сервер...";
+
+            try {
+                const res = await fetch('/mine/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nonce: parseInt(nonce),
+                        address: addrInput.value
+                    })
+                });
+
+                if (res.ok) {
+                    const result = await res.json();
+                    blocksFound++;
+                    document.getElementById('total-blocks').innerText = blocksFound;
+                    statusText.innerText = `✅ Блок принят! +1.0 MEW`;
+                } else {
+                    statusText.innerText = `❌ Сервер отклонил (405 или Bad Nonce).`;
+                }
+            } catch (e) {
+                statusText.innerText = "❌ Ошибка сети при отправке.";
+            }
+
+            if (isMining) setTimeout(startProcess, 1500);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MewWallet — Create</title>
+    <style>
+        :root {
+            --accent: #a855f7;
+            --bg: #000000;
+            --card: #121212;
+            --text: #ffffff;
+        }
+
+        body {
+            margin: 0; padding: 0; background-color: var(--bg);
+            color: var(--text); font-family: 'Inter', sans-serif;
+            display: flex; justify-content: center; align-items: center; min-height: 100vh;
+        }
+
+        .app-shell {
+            width: 100%; max-width: 420px; height: 100vh; max-height: 850px;
+            display: flex; flex-direction: column; padding: 30px;
+        }
+
+        .header { margin-bottom: 30px; }
+        .back-btn { color: var(--accent); text-decoration: none; font-weight: bold; font-size: 14px; }
+
+        h1 { font-size: 32px; font-weight: 800; margin: 10px 0; }
+        p { color: #888; font-size: 16px; margin-bottom: 30px; }
+
+        .seed-container {
+            background: var(--card);
+            border: 1px solid #222;
+            border-radius: 24px;
+            padding: 25px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(168, 85, 247, 0.1);
+        }
+
+        .seed-word {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            font-size: 14px;
+            background: #000;
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .warning-box {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid #ff4444;
+            padding: 15px;
+            border-radius: 15px;
+            color: #ff4444;
+            font-size: 13px;
+            margin-bottom: 30px;
+        }
+
+        .btn-main {
+            background-color: var(--accent);
+            color: #fff;
+            padding: 20px;
+            border-radius: 20px;
+            font-size: 18px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: 0.2s;
+            width: 100%;
+        }
+
+        .btn-main:active { transform: scale(0.97); }
+    </style>
+</head>
+<body>
+
+<div class="app-shell">
+    <div class="header">
+        <a href="index.html" class="back-btn">← Back</a>
+    </div>
+
+    <h1>Backup Phrase</h1>
+    <p>Save these 12 words in a safe place. This is the only way to recover your assets.</p>
+
+    <div class="seed-container" id="seed-box">
+        <div style="grid-column: span 2; text-align: center;">Loading...</div>
+    </div>
+
+    <div class="warning-box">
+        <b>Warning:</b> Never share your secret phrase with anyone!
+    </div>
+
+    <button class="btn-main" onclick="confirmSave()">I've secured it</button>
+</div>
+
+<script>
+    // --- СИСТЕМА СОХРАНЕНИЯ ---
+    const MewVault = {
+        salt: "mew_v1_",
+        save: (key, value) => {
+            localStorage.setItem(key, btoa(MewVault.salt + value));
+        }
+    };
+
+    let tempMnemonic = "";
+
+    // Получаем фразу от вашего Rust-сервера (ВАШ РАБОЧИЙ ЭНДПОИНТ)
+    async function fetchSeed() {
+        try {
+            const res = await fetch('/wallet/create');
+            const data = await res.json();
+            
+            tempMnemonic = data.seed_phrase;
+            const seedBox = document.getElementById('seed-box');
+            seedBox.innerHTML = ''; 
+
+            tempMnemonic.split(' ').forEach((word, index) => {
+                const div = document.createElement('div');
+                div.className = 'seed-word';
+                div.innerText = `${index + 1}. ${word}`;
+                seedBox.appendChild(div);
+            });
+        } catch (e) {
+            document.getElementById('seed-box').innerText = "Error fetching seed. Check server.";
+        }
+    }
+
+    function confirmSave() {
+        if (!tempMnemonic) return;
+
+        // Генерируем "адрес" для отображения. 
+        // Т.к. в Rust бэкенде адрес вычисляется динамически, мы просто сохраним фразу.
+        // Чтобы mainWallet не писал Unknown, мы сохраним адрес как "Mew_" + часть фразы (или просто заглушку)
+        // пока не подтянем реальный баланс.
+        
+        const dummyAddress = "Mew_" + btoa(tempMnemonic).substring(0, 8);
+        
+        MewVault.save('mew_address', dummyAddress);
+        MewVault.save('mew_phrase', tempMnemonic);
+
+        window.location.href = 'mainWallet.html';
+    }
+
+    fetchSeed();
+</script>
+</body>
+</html>

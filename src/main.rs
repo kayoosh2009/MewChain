@@ -1,11 +1,14 @@
-use actix_web::{get, post, web, App, HttpServer, Responder, HttpResponse};
-use bip39::{Mnemonic, Language};
-use serde::{Serialize, Deserialize};
-use sha2::{Sha256, Digest};
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use bip39::{Language, Mnemonic};
 use chrono::prelude::*;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 
 // --- СТРУКТУРЫ ДАННЫХ ---
+
+const TG_BOT_TOKEN: &str = "ТВОЙ_ТОКЕН_БОТА";
+const TG_CHAT_ID: &str = "@ТВОЙ_КАНАЛ_ИЛИ_ID";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Transaction {
@@ -41,7 +44,10 @@ impl Block {
     fn calculate_hash(&self) -> String {
         let mut hasher = Sha256::new();
         let tx_data = serde_json::to_string(&self.transactions).unwrap();
-        let input = format!("{}{}{}{}{}", self.index, self.timestamp, tx_data, self.previous_hash, self.nonce);
+        let input = format!(
+            "{}{}{}{}{}",
+            self.index, self.timestamp, tx_data, self.previous_hash, self.nonce
+        );
         hasher.update(input);
         format!("{:x}", hasher.finalize())
     }
@@ -55,8 +61,27 @@ impl Block {
     }
 }
 
-// --- ЯДРО БЛОКЧЕЙНА ---
+// --- ОТПРАВКА В ТЕЛЕГРАМ ---
+async fn send_to_telegram(message: String) {
+    let url = format!("https://api.telegram.org/bot{}/sendMessage", TG_BOT_TOKEN);
+    let client = reqwest::Client::new();
+    let res = client
+        .post(url)
+        .json(&serde_json::json!({
+            "chat_id": TG_CHAT_ID,
+            "text": message,
+            "parse_mode": "Markdown"
+        }))
+        .send()
+        .await;
 
+    match res {
+        Ok(_) => println!("✅ Блок отправлен в Telegram"),
+        Err(e) => eprintln!("❌ Ошибка отправки в ТГ: {}", e),
+    }
+}
+
+// --- ЯДРО БЛОКЧЕЙНА ---
 struct Blockchain {
     chain: Vec<Block>,
     pending_transactions: Vec<Transaction>,
@@ -72,32 +97,52 @@ impl Blockchain {
     }
 
     fn add_transaction(&mut self, sender: String, receiver: String, amount: f64) {
-        self.pending_transactions.push(Transaction { sender, receiver, amount });
-    }
-
-    fn mine_pending_transactions(&mut self) {
-        let previous_hash = self.chain.last().unwrap().hash.clone();
-        let new_block = Block::new(
-            self.chain.len() as u32,
-            self.pending_transactions.clone(),
-            previous_hash
-        );
-        self.chain.push(new_block);
-        self.pending_transactions = vec![];
+        self.pending_transactions.push(Transaction {
+            sender,
+            receiver,
+            amount,
+        });
     }
 
     fn get_balance(&self, address: &str) -> f64 {
         let mut balance = 0.0;
         // Начальный капитал для тестов (например, системе)
-        if address == "Mew_System" { balance = 1000000.0; }
+        if address == "Mew_System" {
+            balance = 1000000.0;
+        }
 
         for block in &self.chain {
             for tx in &block.transactions {
-                if tx.sender == address { balance -= tx.amount; }
-                if tx.receiver == address { balance += tx.amount; }
+                if tx.sender == address {
+                    balance -= tx.amount;
+                }
+                if tx.receiver == address {
+                    balance += tx.amount;
+                }
             }
         }
         balance
+    }
+    async fn mine_pending_transactions(&mut self) {
+        let previous_hash = self.chain.last().unwrap().hash.clone();
+        let mut new_block = Block::new(
+            self.chain.len() as u32,
+            self.pending_transactions.clone(),
+            previous_hash,
+        );
+
+        self.chain.push(new_block.clone());
+        self.pending_transactions = vec![];
+
+        // Отправляем отчет в Telegram
+        let tg_msg = format!(
+            "📦 *Новый Блок #{}*\n Hash: `{}`\n Transactions: {}\n Nonce: {}",
+            new_block.index,
+            new_block.hash,
+            new_block.transactions.len(),
+            new_block.nonce
+        );
+        send_to_telegram(tg_msg).await;
     }
 }
 
@@ -114,10 +159,10 @@ async fn create_wallet() -> impl Responder {
     let mut rng = rand::thread_rng();
     let mut entropy = [0u8; 16]; // 16 байт (128 бит) для создания 12 слов
     rand::RngCore::fill_bytes(&mut rng, &mut entropy);
-    
+
     // Создаем мнемонику из случайных байт
     let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy).unwrap();
-    
+
     HttpResponse::Ok().json(serde_json::json!({
         "seed_phrase": mnemonic.to_string(),
         "warning": "Никому не показывайте эти 12 слов!"
@@ -130,7 +175,7 @@ async fn get_balance_api(data: web::Data<AppState>, path: web::Path<String>) -> 
     let address = path.into_inner();
     let bc = data.blockchain.lock().unwrap();
     let balance = bc.get_balance(&address);
-    
+
     HttpResponse::Ok().json(serde_json::json!({
         "address": address,
         "balance": balance,
@@ -141,31 +186,36 @@ async fn get_balance_api(data: web::Data<AppState>, path: web::Path<String>) -> 
 // Отправка монет с комиссией 3% (Страница 5 MewWallet)
 #[post("/send")]
 async fn send_coins_api(data: web::Data<AppState>, tx: web::Json<Transaction>) -> impl Responder {
-    let mut bc = data.blockchain.lock().unwrap();
-    
-    let commission = tx.amount * 0.03;
-    let total_needed = tx.amount + commission;
+    // 1. ОТКРЫВАЕМ СКОБКУ: Начинаем работу с данными
+    {
+        let mut bc = data.blockchain.lock().unwrap(); // ЗАМОК ЗАКРЫТ 🔒
 
-    if bc.get_balance(&tx.sender) < total_needed {
-        return HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Insufficient funds",
-            "needed_with_fee": total_needed
-        }));
-    }
+        let commission = tx.amount * 0.03;
+        let total_needed = tx.amount + commission;
 
-    // Основная транзакция
-    bc.add_transaction(tx.sender.clone(), tx.receiver.clone(), tx.amount);
-    // Комиссия уходит в казну системы
-    bc.add_transaction(tx.sender.clone(), "Mew_Treasury".to_string(), commission);
-    
-    // Майним блок, чтобы транзакция подтвердилась
-    bc.mine_pending_transactions();
-    
-    HttpResponse::Ok().json(serde_json::json!({
-        "status": "Success",
-        "fee_paid": commission,
-        "new_balance": bc.get_balance(&tx.sender)
-    }))
+        // Проверяем баланс
+        if bc.get_balance(&tx.sender) < total_needed {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "Insufficient funds",
+                "needed_with_fee": total_needed
+            }));
+        }
+
+        // Записываем транзакции в "очередь" (pending_transactions)
+        bc.add_transaction(tx.sender.clone(), tx.receiver.clone(), tx.amount);
+        bc.add_transaction(tx.sender.clone(), "Mew_Treasury".to_string(), commission);
+
+        // Тут работа со списком транзакций окончена
+    } // 2. ЗАКРЫВАЕМ СКОБКУ: Rust видит это и говорит: "Ок, отпускаю замок!" ЗАМОК ОТКРЫТ 🔓
+
+    // 3. Теперь, когда блокчейн СВОБОДЕН для других запросов, мы можем спокойно майнить.
+    // Для майнинга нам СНОВА нужно на секунду зайти в блокчейн.
+    {
+        let mut bc = data.blockchain.lock().unwrap(); // Снова на секунду зашли 🔒
+        bc.mine_pending_transactions().await; // Ждем майнинга и отправки в Telegram
+    } // Снова вышли и все разблокировали 🔓
+
+    HttpResponse::Ok().json(serde_json::json!({"status": "Success"}))
 }
 
 // Просмотр всей цепочки (для отладки)

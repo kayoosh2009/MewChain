@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 const TG_BOT_TOKEN: &str = "ТВОЙ_ТОКЕН_БОТА";
 const TG_CHAT_ID: &str = "@ТВОЙ_КАНАЛ_ИЛИ_ID";
+const APY: f64 = 0.07; // 7% годовых
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Transaction {
@@ -109,18 +110,27 @@ impl Blockchain {
 
     fn get_balance(&self, address: &str) -> f64 {
         let mut balance = 0.0;
-        // Начальный капитал для тестов (например, системе)
+        let now = Utc::now().timestamp();
+        let seconds_in_year = 31536000.0; 
+
         if address == "Mew_System" {
             balance = 1000000.0;
         }
 
         for block in &self.chain {
+            // Разница во времени между созданием блока и текущим моментом
+            let time_diff = now - block.timestamp;
+            let time_in_years = time_diff as f64 / seconds_in_year;
+
             for tx in &block.transactions {
                 if tx.sender == address {
+                    // Расход всегда считается по номиналу (без процентов)
                     balance -= tx.amount;
                 }
                 if tx.receiver == address {
-                    balance += tx.amount;
+                    // Приход растет по формуле: сумма * (1 + (0.07 * время_в_годах))
+                    let staked_amount = tx.amount * (1.0 + (APY * time_in_years));
+                    balance += staked_amount;
                 }
             }
         }

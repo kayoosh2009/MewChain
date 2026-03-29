@@ -263,6 +263,33 @@ async fn get_chain(data: web::Data<AppState>) -> impl Responder {
     HttpResponse::Ok().json(&bc.chain)
 }
 
+#[post("/mine/submit")]
+async fn submit_nonce(data: web::Data<AppState>, info: web::Json<serde_json::Value>) -> impl Responder {
+    let mut bc = data.blockchain.lock().unwrap();
+    
+    let nonce = info["nonce"].as_u64().unwrap_or(0);
+    let address = info["address"].as_str().unwrap_or("Unknown").to_string();
+
+    // Проверяем, подходит ли nonce под текущую сложность
+    let previous_hash = bc.chain.last().unwrap().hash.clone();
+    let mut temp_block = Block::new(
+        bc.chain.len() as u32,
+        bc.pending_transactions.clone(),
+        previous_hash,
+    );
+    temp_block.nonce = nonce;
+    let hash = temp_block.calculate_hash();
+
+    if hash.starts_with("00") { // Сложность 2, как в твоем коде
+        // Если хеш верный, начисляем награду за майнинг
+        bc.add_transaction("Mew_System".to_string(), address, 1.0); // 1 MEW за блок
+        bc.mine_pending_transactions().await;
+        return HttpResponse::Ok().json(serde_json::json!({"status": "Success", "hash": hash}));
+    }
+
+    HttpResponse::BadRequest().json(serde_json::json!({"status": "Invalid nonce"}))
+}
+
 // --- ЗАПУСК ---
 
 #[actix_web::main]

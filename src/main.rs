@@ -8,8 +8,9 @@ use std::collections::HashMap;
 
 // --- СТРУКТУРЫ ДАННЫХ ---
 
-const TG_BOT_TOKEN: &str = "ТВОЙ_ТОКЕН_БОТА";
-const TG_CHAT_ID: &str = "@ТВОЙ_КАНАЛ_ИЛИ_ID";
+// Вместо прямого текста используем std::env
+let tg_token = std::env::var("TG_BOT_TOKEN").expect("TG_BOT_TOKEN not set");
+let tg_chat = std::env::var("TG_CHAT_ID").expect("TG_CHAT_ID not set");
 const APY: f64 = 0.07; // 7% годовых
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

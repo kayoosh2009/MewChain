@@ -336,7 +336,3 @@ async fn main() -> std::io::Result<()> {
     .run()
     .await
 }
-    .bind(("0.0.0.0", 8080))? // Важно для Codespaces!
-    .run()
-    .await
-}

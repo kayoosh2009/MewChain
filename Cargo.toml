@@ -11,7 +11,7 @@ chrono = "0.4"
 actix-web = "4"
 bip39 = { version = "2.0", features = ["rand"] }
 rand = "0.8"
-reqwest = { version = "0.11", features = ["json"] } # Для запросов к ТГ
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["full"] }
 actix-cors = "0.6"
 actix-files = "0.6"

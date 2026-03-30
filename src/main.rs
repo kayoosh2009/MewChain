@@ -71,25 +71,17 @@ impl Block {
 }
 
 // --- ОТПРАВКА В ТЕЛЕГРАМ ---
-async fn send_to_telegram(message: String) {
-    // Добавляем * перед TG_BOT_TOKEN
+async fn send_to_telegram(text: String) {
     let url = format!("https://api.telegram.org/bot{}/sendMessage", *TG_BOT_TOKEN);
     let client = reqwest::Client::new();
-    let res = client
-        .post(url)
+    let _ = client.post(url)
         .json(&serde_json::json!({
-            // Добавляем * перед TG_CHAT_ID
             "chat_id": *TG_CHAT_ID,
-            "text": message,
+            "text": text,
             "parse_mode": "Markdown"
         }))
         .send()
         .await;
-
-    match res {
-        Ok(_) => println!("✅ Block report sent to Telegram"),
-        Err(e) => eprintln!("❌ Telegram error: {}", e),
-    }
 }
 
 // --- ЯДРО БЛОКЧЕЙНА ---
@@ -97,6 +89,7 @@ struct Blockchain {
     chain: Vec<Block>,
     pending_transactions: Vec<Transaction>,
     last_rewards: HashMap<String, i64>,
+    hashes_in_current_block: u8,
 }
 
 impl Blockchain {
@@ -106,6 +99,7 @@ impl Blockchain {
             chain: vec![genesis_block],
             pending_transactions: vec![],
             last_rewards: HashMap::new(),
+            hashes_in_current_block: 0, // И ЭТУ ТОЖЕ
         }
     }
 
@@ -178,9 +172,9 @@ impl Blockchain {
         self.chain.push(new_block.clone());
         self.pending_transactions = vec![];
 
-        // Отправляем отчет в Telegram
+        // Отчет в Telegram на английском
         let tg_msg = format!(
-            "📦 *Новый Блок #{}*\n Hash: `{}`\n Transactions: {}\n Nonce: {}",
+            "📦 *New Block Mined: #{}*\n Hash: `{}`\n Total Txs: {}\n Nonce: {}\n Status: `Confirmed`",
             new_block.index,
             new_block.hash,
             new_block.transactions.len(),
@@ -201,15 +195,35 @@ struct AppState {
 #[get("/wallet/create")]
 async fn create_wallet() -> impl Responder {
     let mut rng = rand::thread_rng();
-    let mut entropy = [0u8; 16]; // 16 байт (128 бит) для создания 12 слов
+    let mut entropy = [0u8; 16]; 
     rand::RngCore::fill_bytes(&mut rng, &mut entropy);
 
-    // Создаем мнемонику из случайных байт
+    // Генерируем 12 слов (мнемонику)
     let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy).unwrap();
+    let seed_phrase = mnemonic.to_string();
+    
+    // Генерируем уникальный адрес MEW_... на основе сид-фразы
+    let address = derive_address(&seed_phrase);
 
+    // Формируем лог для Telegram на английском
+    let tg_msg = format!(
+        "🆕 *New Wallet Registered*\n\n\
+        📍 Address: `{}`\n\
+        📡 Network: `MewChain Mainnet`\n\
+        🛡 Status: `Secured`",
+        address
+    );
+    
+    // Отправляем уведомление в канал
+    send_to_telegram(tg_msg).await;
+
+    // Возвращаем JSON пользователю
     HttpResponse::Ok().json(serde_json::json!({
-        "seed_phrase": mnemonic.to_string(),
-        "warning": "Никому не показывайте эти 12 слов!"
+        "seed_phrase": seed_phrase,
+        "address": address,
+        "symbol": "MEW",
+        "network": "Mainnet",
+        "warning": "CRITICAL: Never share your seed phrase with anyone!"
     }))
 }
 
@@ -254,17 +268,6 @@ async fn send_coins_api(data: web::Data<AppState>, tx: web::Json<Transaction>) -
     HttpResponse::Ok().json(serde_json::json!({"status": "Success"}))
 }
 
-#[get("/reward/{address}")]
-async fn get_daily_reward(data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
-    let address = path.into_inner();
-    let mut bc = data.blockchain.lock().unwrap(); //
-
-    match bc.claim_daily_reward(address).await {
-        Ok(msg) => HttpResponse::Ok().json(serde_json::json!({"status": "Success", "message": msg})),
-        Err(err) => HttpResponse::BadRequest().json(serde_json::json!({"status": "Error", "message": err})),
-    }
-}
-
 // Просмотр всей цепочки (для отладки)
 #[get("/chain")]
 async fn get_chain(data: web::Data<AppState>) -> impl Responder {
@@ -276,27 +279,37 @@ async fn get_chain(data: web::Data<AppState>) -> impl Responder {
 async fn submit_nonce(data: web::Data<AppState>, info: web::Json<serde_json::Value>) -> impl Responder {
     let mut bc = data.blockchain.lock().unwrap();
     
-    let nonce = info["nonce"].as_u64().unwrap_or(0);
     let address = info["address"].as_str().unwrap_or("Unknown").to_string();
 
-    // Проверяем, подходит ли nonce под текущую сложность
-    let previous_hash = bc.chain.last().unwrap().hash.clone();
-    let mut temp_block = Block::new(
-        bc.chain.len() as u32,
-        bc.pending_transactions.clone(),
-        previous_hash,
-    );
-    temp_block.nonce = nonce;
-    let hash = temp_block.calculate_hash();
+    // 1. Reward for ACTIVE hash
+    bc.add_transaction("Mew_System".to_string(), address.clone(), 0.0012);
+    bc.hashes_in_current_block += 1;
 
-    if hash.starts_with("00") { // Сложность 2, как в твоем коде
-        // Если хеш верный, начисляем награду за майнинг
-        bc.add_transaction("Mew_System".to_string(), address, 1.0); // 1 MEW за блок
+    // Send notification to TG for EVERY hash as you requested
+    let hash_msg = format!(
+        "⛏ *Hash Accepted*\nWorker: `{}`\nReward: `0.0012 MEW`\nBlock Progress: `{}/25`",
+        address, bc.hashes_in_current_block
+    );
+    send_to_telegram(hash_msg).await;
+
+    // 2. Check if we reached 25 hashes to close the block
+    if bc.hashes_in_current_block >= 25 {
+        bc.hashes_in_current_block = 0; // Reset counter
+        
+        // Finalize the block
         bc.mine_pending_transactions().await;
-        return HttpResponse::Ok().json(serde_json::json!({"status": "Success", "hash": hash}));
+
+        return HttpResponse::Ok().json(serde_json::json!({
+            "status": "Success",
+            "message": "Block completed. 25/25 hashes collected."
+        }));
     }
 
-    HttpResponse::BadRequest().json(serde_json::json!({"status": "Invalid nonce"}))
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "Accepted",
+        "hash_reward": 0.0012,
+        "progress": format!("{}/25", bc.hashes_in_current_block)
+    }))
 }
 
 // --- ЗАПУСК ---

@@ -305,28 +305,37 @@ async fn submit_nonce(data: web::Data<AppState>, info: web::Json<serde_json::Val
 async fn main() -> std::io::Result<()> {
     dotenv().ok(); 
 
+    // Получаем порт от системы или используем 8080 как запасной
+    let port = std::env::var("PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse::<u16>()
+        .expect("PORT must be a number");
+
     let app_state = web::Data::new(AppState {
         blockchain: Mutex::new(Blockchain::new()),
     });
 
-    println!("🐾 MewWallet Server starting on http://0.0.0.0:8080");
+    println!("🐾 MewWallet Server starting on 0.0.0.0:{}", port);
 
     HttpServer::new(move || {
-        // Настройка разрешений, чтобы фронтенд мог общаться с бэкендом
         let cors = Cors::permissive(); 
 
         App::new()
             .wrap(cors)
             .app_data(app_state.clone())
-            // Сначала регистрируем API
             .service(create_wallet)
             .service(get_balance_api)
             .service(send_coins_api)
             .service(get_chain)
             .service(get_daily_reward)
             .service(submit_nonce)
+            // Убедись, что папка static лежит в корне проекта на GitHub!
             .service(Files::new("/", "./static").index_file("index.html"))
     })
+    .bind(("0.0.0.0", port))? // Привязываемся к динамическому порту
+    .run()
+    .await
+}
     .bind(("0.0.0.0", 8080))? // Важно для Codespaces!
     .run()
     .await

@@ -9,6 +9,7 @@ use actix_cors::Cors;
 use actix_files::Files;
 use dotenv::dotenv; 
 use lazy_static::lazy_static; 
+use rusqlite::{params, Connection};
 
 // --- СТРУКТУРЫ ДАННЫХ ---
 
@@ -94,13 +95,72 @@ struct Blockchain {
 
 impl Blockchain {
     fn new() -> Self {
-        let genesis_block = Block::new(0, vec![], "0".to_string());
-        Blockchain {
-            chain: vec![genesis_block],
+        // Сначала создаем таблицы, если их нет
+        Self::init_db();
+
+        // Пытаемся загрузить блоки из базы
+        let saved_blocks = Self::load_all_blocks();
+
+        let mut bc = Blockchain {
+            chain: saved_blocks.clone(), // Загружаем историю
             pending_transactions: vec![],
             last_rewards: HashMap::new(),
-            hashes_in_current_block: 0, // И ЭТУ ТОЖЕ
+            hashes_in_current_block: 0,
+        };
+
+        if bc.chain.is_empty() {
+            // Если база пуста, создаем Genesis блок
+            let genesis = Block::new(0, vec![], "0".to_string());
+            bc.save_block_to_db(&genesis);
+            bc.chain.push(genesis);
         }
+
+        bc
+    }
+
+    fn init_db() {
+        let conn = Connection::open("mewchain.db").expect("Failed to open DB");
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS blocks (
+                idx INTEGER PRIMARY KEY,
+                timestamp INTEGER,
+                transactions TEXT,
+                prev_hash TEXT,
+                hash TEXT,
+                nonce INTEGER
+            )",
+            [],
+        ).ok();
+    }
+
+    fn save_block_to_db(&self, block: &Block) {
+        let conn = Connection::open("mewchain.db").unwrap();
+        let txs_json = serde_json::to_string(&block.transactions).unwrap();
+        
+        conn.execute(
+            "INSERT INTO blocks (idx, timestamp, transactions, prev_hash, hash, nonce) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![block.index, block.timestamp, txs_json, block.previous_hash, block.hash, block.nonce],
+        ).ok();
+    }
+
+    fn load_all_blocks() -> Vec<Block> {
+        let conn = Connection::open("mewchain.db").unwrap();
+        let mut stmt = conn.prepare("SELECT idx, timestamp, transactions, prev_hash, hash, nonce FROM blocks ORDER BY idx ASC").unwrap();
+        
+        let block_iter = stmt.query_map([], |row| {
+            let txs_raw: String = row.get(2)?;
+            Ok(Block {
+                index: row.get(0)?,
+                timestamp: row.get(1)?,
+                transactions: serde_json::from_str(&txs_raw).unwrap_or_default(),
+                previous_hash: row.get(3)?,
+                hash: row.get(4)?,
+                nonce: row.get(5)?,
+            })
+        }).unwrap();
+
+        block_iter.map(|b| b.unwrap()).collect()
     }
 
     fn add_transaction(&mut self, sender: String, receiver: String, amount: f64) {
@@ -121,17 +181,14 @@ impl Blockchain {
         }
 
         for block in &self.chain {
-            // Разница во времени между созданием блока и текущим моментом
             let time_diff = now - block.timestamp;
             let time_in_years = time_diff as f64 / seconds_in_year;
 
             for tx in &block.transactions {
                 if tx.sender == address {
-                    // Расход всегда считается по номиналу (без процентов)
                     balance -= tx.amount;
                 }
                 if tx.receiver == address {
-                    // Приход растет по формуле: сумма * (1 + (0.07 * время_в_годах))
                     let staked_amount = tx.amount * (1.0 + (APY * time_in_years));
                     balance += staked_amount;
                 }
@@ -142,9 +199,8 @@ impl Blockchain {
 
     async fn claim_daily_reward(&mut self, address: String) -> Result<String, String> {
         let now = Utc::now().timestamp();
-        let day_in_seconds = 86400; // 24 часа в секундах
+        let day_in_seconds = 86400; 
 
-        // Проверяем по нашей "базе" HashMap
         if let Some(last_time) = self.last_rewards.get(&address) {
             if now - last_time < day_in_seconds {
                 let wait_time = day_in_seconds - (now - last_time);
@@ -152,13 +208,11 @@ impl Blockchain {
             }
         }
 
-        // Обновляем время и даем монеты
         self.last_rewards.insert(address.clone(), now);
         self.add_transaction("Mew_System".to_string(), address.clone(), 10.0);
         
         self.mine_pending_transactions().await;
         Ok(format!("10 MEW зачислены на {}", address))
-    
     }
 
     async fn mine_pending_transactions(&mut self) {
@@ -169,10 +223,12 @@ impl Blockchain {
             previous_hash,
         );
 
+        // ВАЖНО: Сохраняем свежий блок в SQLite
+        self.save_block_to_db(&new_block);
+
         self.chain.push(new_block.clone());
         self.pending_transactions = vec![];
 
-        // Отчет в Telegram на английском
         let tg_msg = format!(
             "📦 *New Block Mined: #{}*\n Hash: `{}`\n Total Txs: {}\n Nonce: {}\n Status: `Confirmed`",
             new_block.index,
@@ -342,7 +398,6 @@ async fn main() -> std::io::Result<()> {
             .service(get_chain)
             .service(get_daily_reward)
             .service(submit_nonce)
-            // Убедись, что папка static лежит в корне проекта на GitHub!
             .service(Files::new("/", "./static").index_file("index.html"))
     })
     .bind(("0.0.0.0", port))? // Привязываемся к динамическому порту

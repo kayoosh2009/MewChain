@@ -1,0 +1,13 @@
+# Сборка Rust
+/target/
+
+# Переменные окружения
+.env
+
+# Секретные ключи Firebase
+*.json
+!cargo.toml
+!package.json
+
+# Логи и временные файлы
+*.log

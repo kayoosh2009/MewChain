@@ -42,12 +42,33 @@ struct WalletStats {
     balance: f64,
     apy_earned: f64,
     tasks_completed: u32,
+    last_claim: i64,
 }
 
 struct AppState {
     db: FirestoreDb,
     bot: Bot,
     chat_id: String,
+}
+
+#[derive(Deserialize)]
+struct SendRequest {
+    sender_address: String,
+    receiver_address: String,
+    amount: f64,
+}
+
+// Структура для принятия ключа из JSON
+#[derive(Deserialize)]
+struct ImportRequest {
+    secret_key: String,
+}
+
+#[derive(Deserialize)]
+struct CompleteTaskRequest {
+    address: String,
+    task_id: String, // ID задания (например, "adsgram_view")
+    reward: f64,     // Сумма награды
 }
 
 // --- Wallet Functions ---
@@ -137,6 +158,7 @@ async fn create_wallet(State(state): State<Arc<AppState>>) -> Json<MewWallet> {
         balance: 0.0,
         apy_earned: 0.0,
         tasks_completed: 0,
+        last_claim: 0,
     };
 
     // Записываем в коллекцию "wallets", используя адрес как ID документа
@@ -157,8 +179,7 @@ async fn get_wallet_stats(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(address): axum::extract::Path<String>,
 ) -> Json<WalletStats> {
-    // Ищем документ в коллекции "wallets" по адресу (ID документа)
-    let stats: Option<WalletStats> = state.db.fluent()
+    let stats_opt: Option<WalletStats> = state.db.fluent()
         .select()
         .by_id_in("wallets")
         .obj()
@@ -166,19 +187,48 @@ async fn get_wallet_stats(
         .await
         .unwrap_or(None);
 
-    // Если нашли — отдаем данные, если нет — создаем пустую структуру
-    Json(stats.unwrap_or(WalletStats {
-        address,
-        balance: 0.0,
-        apy_earned: 0.0,
-        tasks_completed: 0,
-    }))
-}
+    match stats_opt {
+        Some(mut stats) => {
+            let now = chrono::Utc::now().timestamp();
+            
+            // Если last_claim > 0 (кошелек активен), считаем APY
+            if stats.last_claim > 0 && now > stats.last_claim {
+                let seconds_passed = now - stats.last_claim;
+                
+                // 7% годовых в секунду
+                let apy_per_second = 0.07 / (365.0 * 24.0 * 3600.0);
+                let reward = stats.balance * apy_per_second * (seconds_passed as f64);
+                
+                if reward > 0.00000001 { // Не мучаем базу из-за микро-сумм
+                    stats.balance += reward;
+                    stats.apy_earned += reward;
+                    stats.last_claim = now; // Обновляем метку времени
 
-// Структура для принятия ключа из JSON
-#[derive(Deserialize)]
-struct ImportRequest {
-    secret_key: String,
+                    // Сохраняем обновленный баланс в фоне
+                    let db_clone = state.db.clone();
+                    let stats_clone = stats.clone();
+                    tokio::spawn(async move {
+                        let _ = db_clone.fluent()
+                            .update()
+                            .fields(paths!(WalletStats::{balance, apy_earned, last_claim}))
+                            .in_col("wallets")
+                            .document_id(&stats_clone.address)
+                            .object(&stats_clone)
+                            .execute()
+                            .await;
+                    });
+                }
+            }
+            Json(stats)
+        }
+        None => Json(WalletStats {
+            address,
+            balance: 0.0,
+            apy_earned: 0.0,
+            tasks_completed: 0,
+            last_claim: 0,
+        }),
+    }
 }
 
 async fn import_wallet(
@@ -205,6 +255,139 @@ async fn import_wallet(
         .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
 
     Ok(Json(wallet))
+}
+
+async fn send_tokens(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SendRequest>,
+) -> Result<Json<String>, (axum::http::StatusCode, String)> {
+    // 1. Константы для экономики
+    let admin_address = "mew013_ТВОЙ_АДРЕС_ТУТ"; // Замени на свой реальный адрес
+    let fee_percent = 0.01; // 1% комиссия
+    let fee = payload.amount * fee_percent;
+    let total_deduction = payload.amount + fee;
+
+    // 2. Получаем данные отправителя
+    let mut sender_stats: WalletStats = state.db.fluent()
+        .select()
+        .by_id_in("wallets")
+        .obj()
+        .one(&payload.sender_address)
+        .await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?
+        .ok_or((axum::http::StatusCode::NOT_FOUND, "Sender not found".to_string()))?;
+
+    // 3. Проверяем, хватает ли средств на перевод + комиссию
+    if sender_stats.balance < total_deduction {
+        return Err((axum::http::StatusCode::BAD_REQUEST, format!("Insufficient funds. Need {} MEW (incl. fee)", total_deduction)));
+    }
+
+    // 4. Получаем данные получателя
+    let mut receiver_stats: WalletStats = state.db.fluent()
+        .select()
+        .by_id_in("wallets")
+        .obj()
+        .one(&payload.receiver_address)
+        .await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?
+        .ok_or((axum::http::StatusCode::NOT_FOUND, "Receiver not found".to_string()))?;
+
+    // 5. Проводим расчеты балансов
+    sender_stats.balance -= total_deduction;
+    receiver_stats.balance += payload.amount;
+
+    // 6. Обновляем отправителя в БД
+    let _: WalletStats = state.db.fluent()
+        .update()
+        .fields(paths!(WalletStats::balance))
+        .in_col("wallets")
+        .document_id(&payload.sender_address)
+        .object(&sender_stats)
+        .execute()
+        .await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to update sender".to_string()))?;
+
+    // 7. Обновляем получателя в БД
+    let _: WalletStats = state.db.fluent()
+        .update()
+        .fields(paths!(WalletStats::balance))
+        .in_col("wallets")
+        .document_id(&payload.receiver_address)
+        .object(&receiver_stats)
+        .execute()
+        .await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to update receiver".to_string()))?;
+
+    // 8. Зачисляем комиссию админу (тебе)
+    let admin_opt: Option<WalletStats> = state.db.fluent()
+        .select()
+        .by_id_in("wallets")
+        .obj()
+        .one(admin_address)
+        .await
+        .unwrap_or(None);
+
+    if let Some(mut admin_stats) = admin_opt {
+        admin_stats.balance += fee;
+        let db_c = state.db.clone();
+        let addr_c = admin_address.to_string();
+        tokio::spawn(async move {
+            let _ = db_c.fluent()
+                .update()
+                .fields(paths!(WalletStats::balance))
+                .in_col("wallets")
+                .document_id(&addr_c)
+                .object(&admin_stats)
+                .execute()
+                .await;
+        });
+    }
+
+    // 9. Отчет в Telegram
+    let msg = format!(
+        "💸 *Перевод MEW*\nОт: `{}`\nКому: `{}`\nСумма: `{} MEW` (Газ: `{} MEW`)",
+        payload.sender_address, payload.receiver_address, payload.amount, fee
+    );
+    let _ = state.bot.send_message(state.chat_id.clone(), msg).await;
+
+    Ok(Json(format!("Successfully sent {} MEW (Fee: {})", payload.amount, fee)))
+}
+
+async fn complete_task(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CompleteTaskRequest>,
+) -> Result<Json<String>, (axum::http::StatusCode, String)> {
+    let mut stats: WalletStats = state.db.fluent()
+        .select()
+        .by_id_in("wallets")
+        .obj()
+        .one(&payload.address)
+        .await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?
+        .ok_or((axum::http::StatusCode::NOT_FOUND, "Wallet not found".to_string()))?;
+
+    // ПРОВЕРКА: 1 час = 3600 секунд
+    let now = chrono::Utc::now().timestamp();
+    if now - stats.last_claim < 3600 {
+        let wait_min = (3600 - (now - stats.last_claim)) / 60;
+        return Err((axum::http::StatusCode::FORBIDDEN, format!("Wait {} min", wait_min)));
+    }
+
+    stats.balance += payload.reward;
+    stats.tasks_completed += 1;
+    stats.last_claim = now; // Фиксируем время нажатия
+
+    let _: WalletStats = state.db.fluent()
+        .update()
+        .fields(paths!(WalletStats::{balance, tasks_completed, last_claim}))
+        .in_col("wallets")
+        .document_id(&payload.address)
+        .object(&stats)
+        .execute()
+        .await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to update stats".to_string()))?;
+
+    Ok(Json(format!("Награда {} MEW зачислена", payload.reward)))
 }
 
 #[tokio::main]
@@ -238,6 +421,8 @@ async fn main() {
         .route("/wallet/new", get(create_wallet)) // Создать новый
         .route("/wallet/import", post(import_wallet))
         .route("/wallet/:address", get(get_wallet_stats)) // Получить статы
+        .route("/wallet/task", post(complete_task))
+        .route("/wallet/send", post(send_tokens))
         .with_state(shared_state);
         
     // Запуск сервера

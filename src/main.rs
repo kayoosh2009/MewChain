@@ -71,6 +71,27 @@ struct CompleteTaskRequest {
     reward: f64,     // Сумма награды
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct GroupMember {
+    address: String,
+    joined_at: i64,      // Unix timestamp вступления
+    last_ping: i64,      // Последний подтвержденный час активности
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct NodeGroup {
+    id: String,          // Уникальный ID или имя группы
+    owner: String,       // Адрес создателя
+    members: Vec<GroupMember>,
+    total_mined: f64,    // Сколько всего группа добыла за всё время
+}
+
+#[derive(Deserialize)]
+struct JoinRequest {
+    address: String,
+    group_id: String,
+}
+
 // --- Wallet Functions ---
 impl MewWallet {
     // 1. Создание кошелька
@@ -390,6 +411,120 @@ async fn complete_task(
     Ok(Json(format!("Награда {} MEW зачислена", payload.reward)))
 }
 
+async fn create_group(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<JoinRequest>, // Используем JoinRequest для простоты
+) -> Result<Json<String>, (axum::http::StatusCode, String)> {
+    let now = chrono::Utc::now().timestamp();
+    
+    let new_group = NodeGroup {
+        id: payload.group_id.clone(),
+        owner: payload.address.clone(),
+        members: vec![GroupMember {
+            address: payload.address,
+            joined_at: now,
+            last_ping: now,
+        }],
+        total_mined: 0.0,
+    };
+
+    state.db.fluent()
+        .insert().into("groups")
+        .document_id(&new_group.id)
+        .object(&new_group)
+        .execute().await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
+
+    Ok(Json(format!("Группа {} создана", new_group.id)))
+}
+
+async fn node_ping(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<JoinRequest>,
+) -> Result<Json<String>, (axum::http::StatusCode, String)> {
+    let mut group: NodeGroup = state.db.fluent()
+        .select().by_id_in("groups").obj().one(&payload.group_id).await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?
+        .ok_or((axum::http::StatusCode::NOT_FOUND, "Group not found".to_string()))?;
+
+    let now = chrono::Utc::now().timestamp();
+    
+    // Ищем участника в векторе
+    if let Some(member) = group.members.iter_mut().find(|m| m.address == payload.address) {
+        // Проверка на 1 час (3600 сек)
+        if now - member.last_ping < 3600 {
+            return Err((axum::http::StatusCode::FORBIDDEN, "Too early for ping".to_string()));
+        }
+
+        // РАСЧЕТ НАГРАДЫ НА ОСНОВЕ ЛОЯЛЬНОСТИ
+        // Базовая награда 0.1, +10% за каждый день пребывания (86400 сек), максимум +200%
+        let days_in_group = (now - member.joined_at) / 86400;
+        let loyalty_multiplier = 1.0 + (days_in_group as f64 * 0.1).min(2.0);
+        let final_reward = 0.1 * loyalty_multiplier;
+
+        member.last_ping = now;
+        
+        // Тут нужно вызвать функцию начисления баланса пользователю...
+        // И обновить группу в БД
+        state.db.fluent()
+            .update().in_col("groups")
+            .document_id(&group.id)
+            .object(&group)
+            .execute().await
+            .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to save ping".to_string()))?;
+
+        Ok(Json(format!("Пинг принят! Бонус лояльности: x{:.2}. Получено: {:.4}", loyalty_multiplier, final_reward)))
+    } else {
+        Err((axum::http::StatusCode::UNAUTHORIZED, "You are not in this group".to_string()))
+    }
+}
+
+async fn join_group(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<JoinRequest>,
+) -> Result<Json<String>, (axum::http::StatusCode, String)> {
+    // 1. Ищем группу в БД
+    let mut group: NodeGroup = state.db.fluent()
+        .select()
+        .by_id_in("groups")
+        .obj()
+        .one(&payload.group_id)
+        .await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?
+        .ok_or((axum::http::StatusCode::NOT_FOUND, "Group not found".to_string()))?;
+
+    // 2. Проверяем, не в группе ли уже этот адрес
+    if group.members.iter().any(|m| m.address == payload.address) {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "Already a member".to_string()));
+    }
+
+    // 3. Создаем нового участника с текущим временем (начало отсчета лояльности)
+    let now = chrono::Utc::now().timestamp();
+    let new_member = GroupMember {
+        address: payload.address.clone(),
+        joined_at: now,
+        last_ping: now,
+    };
+
+    group.members.push(new_member);
+
+    // 4. Сохраняем обновленный список участников в Firestore
+    state.db.fluent()
+        .update()
+        .in_col("groups")
+        .document_id(&group.id)
+        .object(&group)
+        .execute()
+        .await
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to join group".to_string()))?;
+
+    // 5. Уведомление в ТГ
+    let msg = format!("👥 Новый участник в группе `{}`!\nАдрес: `{}`", group.id, payload.address);
+    let _ = state.bot.send_message(state.chat_id.clone(), msg).await;
+
+    Ok(Json(format!("Вы успешно вступили в группу {}", group.id)))
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -423,6 +558,9 @@ async fn main() {
         .route("/wallet/:address", get(get_wallet_stats)) // Получить статы
         .route("/wallet/task", post(complete_task))
         .route("/wallet/send", post(send_tokens))
+        .route("/groups/create", post(create_group))
+        .route("/groups/join", post(join_group))
+        .route("/groups/ping", post(node_ping))
         .with_state(shared_state);
         
     // Запуск сервера

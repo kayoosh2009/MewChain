@@ -554,17 +554,16 @@ async fn main() {
     let app = Router::new()
         .route("/blocks", get(get_blocks))
         .route("/add_block", post(add_block))
-        .route("/wallet/new", get(create_wallet)) // Создать новый
+        .route("/wallet/new", get(create_wallet))
         .route("/wallet/import", post(import_wallet))
-        .route("/wallet/:address", get(get_wallet_stats)) // Получить статы
+        .route("/wallet/:address", get(get_wallet_stats))
         .route("/wallet/task", post(complete_task))
         .route("/wallet/send", post(send_tokens))
         .route("/groups/create", post(create_group))
         .route("/groups/join", post(join_group))
         .route("/groups/ping", post(node_ping))
-        .with_state(shared_state);
-
-        .fallback_service(ServeDir::new("static"));
+        .fallback_service(ServeDir::new("static")) // Раздаем статику
+        .with_state(shared_state); // Состояние прикрепляем ОДИН РАЗ в самом конце
         
     // Запуск сервера
     let addr = format!("0.0.0.0:{}", port);

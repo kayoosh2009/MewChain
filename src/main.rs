@@ -7,7 +7,7 @@ use std::env;
 use teloxide::prelude::*;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
-use axum::extract::Path;
+use tower_http::services::ServeDir;
 
 // --- МОДЕЛИ ДАННЫХ ---
 
@@ -67,7 +67,7 @@ struct ImportRequest {
 #[derive(Deserialize)]
 struct CompleteTaskRequest {
     address: String,
-    task_id: String, // ID задания (например, "adsgram_view")
+    _task_id: String, // ID задания (например, "adsgram_view")
     reward: f64,     // Сумма награды
 }
 
@@ -133,12 +133,12 @@ async fn add_block(
     Json(new_block): Json<Block>,
 ) -> Json<String> {
     // 1. Сохраняем в Firestore (используем индекс блока как имя документа)
-    let _ : Block = state.db.fluent()
+    let _: () = state.db.fluent()
         .insert()
         .into("blocks")
         .document_id(new_block.index.to_string())
         .object(&new_block)
-        .execute()
+        .execute::<()>()
         .await
         .expect("Failed to write block to Firestore");
 
@@ -160,7 +160,7 @@ async fn get_blocks(State(state): State<Arc<AppState>>) -> Json<Vec<Block>> {
     let blocks: Vec<Block> = state.db.fluent()
         .select()
         .from("blocks")
-        .order_by([("index", FirestoreQueryOrder::Ascending)])
+        .order_by([("index", firestore::FirestoreQueryDirection::Ascending)]) // Если Asc не сработал, верни Ascending, но проверь скобки
         .obj()
         .query()
         .await
@@ -183,12 +183,12 @@ async fn create_wallet(State(state): State<Arc<AppState>>) -> Json<MewWallet> {
     };
 
     // Записываем в коллекцию "wallets", используя адрес как ID документа
-    let _ : WalletStats = state.db.fluent()
+    let _: () = state.db.fluent()
         .insert()
         .into("wallets")
         .document_id(&wallet.address)
         .object(&initial_stats)
-        .execute()
+        .execute::<()>()
         .await
         .expect("Failed to register wallet in Firestore");
 
@@ -235,7 +235,7 @@ async fn get_wallet_stats(
                             .in_col("wallets")
                             .document_id(&stats_clone.address)
                             .object(&stats_clone)
-                            .execute()
+                            .execute::<()>()
                             .await;
                     });
                 }
@@ -261,7 +261,7 @@ async fn import_wallet(
         .map_err(|e| (axum::http::StatusCode::BAD_REQUEST, e))?;
 
     // 2. Проверяем, есть ли он в базе, если нет — создаем начальные статы
-    let _: WalletStats = state.db.fluent()
+    let _: () = state.db.fluent()
         .insert()
         .into("wallets")
         .document_id(&wallet.address)
@@ -270,8 +270,9 @@ async fn import_wallet(
             balance: 0.0,
             apy_earned: 0.0,
             tasks_completed: 0,
+            last_claim: 0,
         })
-        .execute()
+        .execute::<()>()
         .await
         .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
 
@@ -318,24 +319,24 @@ async fn send_tokens(
     receiver_stats.balance += payload.amount;
 
     // 6. Обновляем отправителя в БД
-    let _: WalletStats = state.db.fluent()
+    let _: () = state.db.fluent()
         .update()
         .fields(paths!(WalletStats::balance))
         .in_col("wallets")
         .document_id(&payload.sender_address)
         .object(&sender_stats)
-        .execute()
+        .execute::<()>()
         .await
         .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to update sender".to_string()))?;
 
     // 7. Обновляем получателя в БД
-    let _: WalletStats = state.db.fluent()
+    let _: () = state.db.fluent()
         .update()
         .fields(paths!(WalletStats::balance))
         .in_col("wallets")
         .document_id(&payload.receiver_address)
         .object(&receiver_stats)
-        .execute()
+        .execute::<()>()
         .await
         .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to update receiver".to_string()))?;
 
@@ -359,7 +360,7 @@ async fn send_tokens(
                 .in_col("wallets")
                 .document_id(&addr_c)
                 .object(&admin_stats)
-                .execute()
+                .execute::<()>()
                 .await;
         });
     }
@@ -398,13 +399,13 @@ async fn complete_task(
     stats.tasks_completed += 1;
     stats.last_claim = now; // Фиксируем время нажатия
 
-    let _: WalletStats = state.db.fluent()
+    let _: () = state.db.fluent()
         .update()
         .fields(paths!(WalletStats::{balance, tasks_completed, last_claim}))
         .in_col("wallets")
         .document_id(&payload.address)
         .object(&stats)
-        .execute()
+        .execute::<()>()
         .await
         .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to update stats".to_string()))?;
 
@@ -432,7 +433,7 @@ async fn create_group(
         .insert().into("groups")
         .document_id(&new_group.id)
         .object(&new_group)
-        .execute().await
+        .execute::<()>().await
         .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
 
     Ok(Json(format!("Группа {} создана", new_group.id)))
@@ -470,7 +471,7 @@ async fn node_ping(
             .update().in_col("groups")
             .document_id(&group.id)
             .object(&group)
-            .execute().await
+            .execute::<()>().await
             .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to save ping".to_string()))?;
 
         Ok(Json(format!("Пинг принят! Бонус лояльности: x{:.2}. Получено: {:.4}", loyalty_multiplier, final_reward)))
@@ -514,7 +515,7 @@ async fn join_group(
         .in_col("groups")
         .document_id(&group.id)
         .object(&group)
-        .execute()
+        .execute::<()>()
         .await
         .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to join group".to_string()))?;
 
@@ -562,6 +563,8 @@ async fn main() {
         .route("/groups/join", post(join_group))
         .route("/groups/ping", post(node_ping))
         .with_state(shared_state);
+
+        .fallback_service(ServeDir::new("static"));
         
     // Запуск сервера
     let addr = format!("0.0.0.0:{}", port);

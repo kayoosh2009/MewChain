@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - Receive</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --card: #121212;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 24px var(--safe-bottom) 24px;
+            box-sizing: border-box;
+        }
+
+        .header { height: 60px; display: flex; align-items: center; }
+        .back-btn { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Центрируем QR по вертикали */
+            align-items: flex-start; /* Текст заголовка слева */
+        }
+
+        h1 { font-size: 32px; font-weight: 800; margin: 0 0 8px 0; letter-spacing: -1px; }
+        .subtitle { color: var(--text-dim); font-size: 15px; margin-bottom: 40px; }
+
+        /* Контейнер для QR-кода */
+        .qr-container {
+            align-self: center; /* Сам QR центрируем */
+            background: #FFFFFF; /* Белый фон обязателен для считывания QR */
+            padding: 20px;
+            border-radius: 24px;
+            box-shadow: 0 0 30px rgba(168, 155, 242, 0.15);
+            margin-bottom: 30px;
+        }
+
+        /* Поле адреса */
+        .address-display {
+            width: 100%;
+            background: var(--card);
+            border: 1px solid #1a1a1a;
+            border-radius: 16px;
+            padding: 16px;
+            box-sizing: border-box;
+            cursor: pointer;
+            text-align: center;
+            transition: 0.2s;
+        }
+
+        .address-display:active { transform: scale(0.98); background: #1a1a1a; }
+
+        .address-text {
+            color: var(--accent);
+            font-family: monospace;
+            font-size: 14px;
+            word-break: break-all;
+            margin: 0;
+        }
+
+        .copy-hint {
+            color: var(--text-dim);
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-top: 8px;
+            letter-spacing: 1px;
+            display: block;
+        }
+
+        .footer-actions { margin-top: auto; padding-bottom: 20px; }
+        
+        .btn-done {
+            width: 100%;
+            padding: 20px;
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 18px;
+            font-size: 17px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-done:active { transform: scale(0.96); }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="header">
+            <a href="mainWallet.html" class="back-btn">← BACK</a>
+        </div>
+
+        <div class="main-content">
+            <h1>Receive</h1>
+            <p class="subtitle">Scan this QR code or copy the address below to receive Mew assets.</p>
+
+            <div class="qr-container" id="qrcode">
+                </div>
+
+            <div class="address-display" onclick="copyAddress()">
+                <p class="address-text" id="fullAddress">mew013...</p>
+                <span class="copy-hint">Tap to copy address</span>
+            </div>
+        </div>
+
+        <div class="footer-actions">
+            <button class="btn-done" onclick="window.location.href='mainWallet.html'">Done</button>
+        </div>
+    </div>
+
+    <script>
+        function init() {
+            const sessionData = localStorage.getItem('mew_session');
+            if (!sessionData) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            const session = JSON.parse(atob(sessionData));
+            const address = session.address;
+
+            // Отображаем текстовый адрес
+            document.getElementById('fullAddress').innerText = address;
+
+            // Генерируем QR-код
+            new QRCode(document.getElementById("qrcode"), {
+                text: address,
+                width: 220,
+                height: 220,
+                colorDark : "#000000",
+                colorLight : "#FFFFFF",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        }
+
+        function copyAddress() {
+            const addr = document.getElementById('fullAddress').innerText;
+            navigator.clipboard.writeText(addr);
+            
+            // Визуальный отклик
+            const hint = document.querySelector('.copy-hint');
+            hint.innerText = "Copied!";
+            hint.style.color = "#4CAF50";
+            
+            setTimeout(() => {
+                hint.innerText = "Tap to copy address";
+                hint.style.color = "var(--text-dim)";
+            }, 2000);
+        }
+
+        init();
+    </script>
+</body>
+</html>

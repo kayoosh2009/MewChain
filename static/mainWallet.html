@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - Home</title>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --card: #121212;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 20px var(--safe-bottom) 20px;
+            box-sizing: border-box;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .address-chip {
+            background: var(--card);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-family: monospace;
+            color: var(--accent);
+            cursor: pointer;
+            border: 1px solid #1a1a1a;
+        }
+
+        .settings-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--card);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            border: 1px solid #1a1a1a;
+        }
+
+        .settings-btn img { width: 20px; height: 20px; }
+
+        /* Balance Section */
+        .balance-section {
+            flex: 0.8;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .balance-amount {
+            font-size: 48px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: -1px;
+        }
+
+        .balance-change {
+            font-size: 16px;
+            color: #4CAF50; /* Зеленый для роста */
+            margin-top: 8px;
+            font-weight: 600;
+        }
+
+        /* Quick Actions Grid */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .action-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-decoration: none;
+            gap: 8px;
+        }
+
+        .action-icon {
+            width: 56px;
+            height: 56px;
+            background: var(--accent);
+            border-radius: 18px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.2s;
+        }
+
+        .action-icon img { width: 24px; height: 24px; filter: brightness(0); } /* Делаем иконки черными */
+
+        .action-item span {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .action-item:active .action-icon { transform: scale(0.9); }
+
+        /* Assets List */
+        .divider {
+            height: 1px;
+            background: #1a1a1a;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .asset-list {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .asset-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+        }
+
+        .asset-info { display: flex; align-items: center; gap: 12px; }
+        .asset-logo { width: 40px; height: 40px; background: #1a1a1a; border-radius: 10px; display: flex; justify-content: center; align-items: center; font-weight: bold; color: var(--accent); }
+        
+        .asset-names h4 { margin: 0; font-size: 16px; }
+        .asset-names p { margin: 0; font-size: 12px; color: var(--text-dim); }
+
+        .asset-values { text-align: right; }
+        .asset-values h4 { margin: 0; font-size: 16px; }
+        .asset-values p { margin: 0; font-size: 12px; color: var(--text-dim); }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="top-bar">
+            <div class="address-chip" id="userAddress" onclick="copyAddr()">0x000...000</div>
+            <a href="apps/settings.html" class="settings-btn">
+                <img src="img/setting.png" alt="Settings">
+            </a>
+        </div>
+
+        <div class="balance-section">
+            <h1 class="balance-amount" id="mainBalance">$0.00</h1>
+            <div class="balance-change" id="balancePercent" style="color: var(--text-dim);">0.00% (24h)</div>
+        </div>
+
+        <div class="actions-grid">
+            <a href="sentWallet.html" class="action-item">
+                <div class="action-icon"><img src="img/sent.png"></div>
+                <span>Send</span>
+            </a>
+            <a href="getWallet.html" class="action-item">
+                <div class="action-icon"><img src="img/get.png"></div>
+                <span>Receive</span>
+            </a>
+            <a href="historyWallet.html" class="action-item">
+                <div class="action-icon"><img src="img/history.png"></div>
+                <span>History</span>
+            </a>
+            <a href="menuWallet.html" class="action-item">
+                <div class="action-icon"><img src="img/menu.png"></div>
+                <span>More</span>
+            </a>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="asset-list">
+            <div class="asset-row">
+                <div class="asset-info">
+                    <div class="asset-logo">M</div>
+                    <div class="asset-names">
+                        <h4>Mew</h4>
+                        <p>MewToken $MEW</p>
+                    </div>
+                </div>
+                <div class="asset-values">
+                    <h4 id="mewAmount">0.00</h4>
+                    <p id="mewValue">$0.00</p>
+                </div>
+            </div>
+
+            <div class="asset-row">
+                <div class="asset-info">
+                    <div class="asset-logo" style="color: #26A17B;">T</div>
+                    <div class="asset-names">
+                        <h4>USDT</h4>
+                        <p>Tether USD</p>
+                    </div>
+                </div>
+                <div class="asset-values">
+                    <h4>0.00</h4>
+                    <p>$0.00</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadWalletData() {
+            const sessionData = localStorage.getItem('mew_session');
+            if (!sessionData) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            const session = JSON.parse(atob(sessionData));
+            const addr = session.address;
+            
+            // Сокращаем адрес для отображения
+            document.getElementById('userAddress').innerText = 
+                addr.substring(0, 6) + '...' + addr.substring(addr.length - 4);
+
+            try {
+                // Запрашиваем данные с бэкенда Rust
+                const response = await fetch(`/wallet/${addr}`);
+                if (response.ok) {
+                    const stats = await response.json();
+                    const mewBalance = stats.balance;
+                    const usdValue = mewBalance / 2009;
+
+                    document.getElementById('mewAmount').innerText = mewBalance.toFixed(2);
+                    document.getElementById('mewValue').innerText = `$${usdValue.toFixed(2)}`;
+                    document.getElementById('mainBalance').innerText = `$${usdValue.toFixed(2)}`;
+                }
+            } catch (e) {
+                console.log("Offline mode or server error");
+            }
+
+            const percentEl = document.getElementById('balancePercent');
+            const change = 0.00; // Пока у нас в базе нет истории, будет 0
+
+            percentEl.innerText = `${change >= 0 ? '+' : ''}${change.toFixed(2)}% (24h)`;
+            percentEl.style.color = change >= 0 ? '#4CAF50' : '#ff6b6b'; 
+            if (change === 0) percentEl.style.color = 'var(--text-dim)'
+        }
+
+        function copyAddr() {
+            const session = JSON.parse(atob(localStorage.getItem('mew_session')));
+            navigator.clipboard.writeText(session.address);
+            alert("Address copied!");
+        }
+
+        loadWalletData();
+    </script>
+</body>
+</html>

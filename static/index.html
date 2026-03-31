@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain Wallet</title>
+    <script>
+        // Скрипт проверки сессии (выполняется до рендеринга контента)
+        (function() {
+            const session = localStorage.getItem('mew_session');
+            if (session) {
+                // Если хеш есть, летим сразу в основной кошелек
+                window.location.href = 'mainWallet.html';
+            }
+        })();
+    </script>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            overflow: hidden;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            height: 100vh;
+            background-color: var(--bg);
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 24px var(--safe-bottom) 24px;
+            box-sizing: border-box;
+        }
+
+        .header {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            color: #222;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+            text-align: left;
+            padding-right: 40px;
+        }
+
+        h1 {
+            font-size: 36px;
+            font-weight: 800;
+            margin: 0 0 16px 0;
+            letter-spacing: -1.5px;
+            line-height: 1.1;
+        }
+
+        .subtitle {
+            color: var(--text-dim);
+            font-size: 17px;
+            line-height: 1.5;
+            margin: 0;
+            font-weight: 400;
+        }
+
+        .footer-actions {
+            width: 100%;
+            padding-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 20px;
+            border-radius: 18px;
+            font-size: 17px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+            display: block;
+            text-align: center;
+            letter-spacing: -0.3px;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: var(--bg);
+            box-shadow: 0 4px 15px rgba(168, 155, 242, 0.2);
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            color: var(--accent);
+            border: 2px solid var(--accent);
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="header">MEWCHAIN</div>
+
+        <div class="main-content">
+            <h1>Welcome!</h1>
+            <p class="subtitle">Choose your preferred option to manage decentralized assets.</p>
+        </div>
+
+        <div class="footer-actions">
+            <a href="createWallet.html" class="btn btn-primary">Create New Wallet</a>
+            <a href="importWallet.html" class="btn btn-secondary">Import Wallet</a>
+        </div>
+    </div>
+
+</body>
+</html>

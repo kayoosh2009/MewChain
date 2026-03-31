@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - Import</title>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --card: #121212;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 24px var(--safe-bottom) 24px;
+            box-sizing: border-box;
+        }
+
+        .header {
+            height: 60px;
+            display: flex;
+            align-items: center;
+        }
+
+        .back-btn { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        h1 { font-size: 32px; font-weight: 800; margin: 0 0 12px 0; letter-spacing: -1px; }
+        .subtitle { color: var(--text-dim); font-size: 15px; margin-bottom: 30px; line-height: 1.4; }
+
+        .input-area {
+            width: 100%;
+            background: var(--card);
+            border: 1px solid #1a1a1a;
+            border-radius: 20px;
+            padding: 20px;
+            box-sizing: border-box;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-area:focus-within {
+            border-color: var(--accent);
+        }
+
+        textarea {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--accent);
+            font-family: monospace;
+            font-size: 16px;
+            resize: none;
+            outline: none;
+            line-height: 1.6;
+        }
+
+        textarea::placeholder { color: #333; }
+
+        .footer-actions {
+            width: 100%;
+            padding-bottom: 20px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 20px;
+            border-radius: 18px;
+            font-size: 17px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+            display: block;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            background-color: var(--accent);
+            color: var(--bg);
+        }
+
+        .btn:active { transform: scale(0.96); opacity: 0.9; }
+        
+        .error-msg {
+            color: #ff6b6b;
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="header">
+            <a href="index.html" class="back-btn">← BACK</a>
+        </div>
+
+        <div class="main-content">
+            <h1>Import Wallet</h1>
+            <p class="subtitle">Enter your 12 or 24-word recovery phrase to restore access to your MewChain account.</p>
+            
+            <div class="input-area">
+                <textarea id="mnemonicInput" rows="4" placeholder="word1 word2 word3..."></textarea>
+            </div>
+            <div id="error" class="error-msg">Invalid mnemonic phrase. Check the words.</div>
+        </div>
+
+        <div class="footer-actions">
+            <button class="btn" onclick="handleImport()">Import Account</button>
+        </div>
+    </div>
+
+    <script>
+        async function handleImport() {
+            const input = document.getElementById('mnemonicInput').value.trim();
+            const words = input.split(/\s+/); // Разбиваем по любым пробелам
+            const errorEl = document.getElementById('error');
+
+            if (words.length !== 12 && words.length !== 24) {
+                errorEl.style.display = 'block';
+                errorEl.innerText = "Please enter exactly 12 or 24 words.";
+                return;
+            }
+
+            errorEl.style.display = 'none';
+
+            try {
+                // Для демо-версии мы используем фиксированный ключ или генерируем его из фразы.
+                // В реальности мы отправляем запрос на /wallet/import (как в твоем Rust коде)
+                // Но так как Rust сейчас ждет hex-ключ, мы передаем "фраза-как-ключ" для теста
+                
+                const response = await fetch('/wallet/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secret_key: btoa(input).substring(0, 64) }) // Временный хак для совместимости с ED25519
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Сохраняем захешированную сессию
+                    const session = {
+                        address: data.address,
+                        sk: data.secret_key,
+                        isLoggedIn: true,
+                        importedAt: Date.now()
+                    };
+
+                    localStorage.setItem('mew_session', btoa(JSON.stringify(session)));
+                    window.location.href = 'mainWallet.html';
+                } else {
+                    errorEl.style.display = 'block';
+                    errorEl.innerText = "Server rejected the key. Try another one.";
+                }
+            } catch (e) {
+                errorEl.style.display = 'block';
+                errorEl.innerText = "Connection error. Is the node running?";
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - Send</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --card: #121212;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 24px var(--safe-bottom) 24px;
+            box-sizing: border-box;
+        }
+
+        .header { height: 60px; display: flex; align-items: center; justify-content: space-between; }
+        .back-btn { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+
+        .main-content { flex: 1; padding-top: 20px; }
+        h1 { font-size: 32px; font-weight: 800; margin: 0 0 20px 0; letter-spacing: -1px; }
+
+        /* Поля ввода */
+        .input-group { margin-bottom: 24px; }
+        .label { color: var(--text-dim); font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; display: block; }
+        
+        .input-wrapper {
+            background: var(--card);
+            border: 1px solid #1a1a1a;
+            border-radius: 16px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        input, select {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 16px;
+            width: 100%;
+            outline: none;
+        }
+
+        .scan-btn { background: none; border: none; cursor: pointer; padding: 0; }
+        .scan-btn img { width: 24px; height: 24px; filter: invert(1); opacity: 0.5; }
+
+        /* QR Scanner Container */
+        #reader { width: 100%; border-radius: 16px; overflow: hidden; margin-bottom: 20px; display: none; border: 1px solid var(--accent) !important; }
+
+        /* Инфо о комиссии */
+        .fee-box {
+            background: rgba(168, 155, 242, 0.05);
+            padding: 16px;
+            border-radius: 14px;
+            margin-top: 20px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .fee-box span { color: var(--text-dim); }
+        .fee-box b { color: var(--accent); }
+
+        .footer-actions { margin-top: auto; padding-bottom: 20px; }
+        .btn-send {
+            width: 100%;
+            padding: 20px;
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 18px;
+            font-size: 17px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-send:active { transform: scale(0.96); }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="header">
+            <a href="mainWallet.html" class="back-btn">← CANCEL</a>
+        </div>
+
+        <div class="main-content">
+            <h1>Send</h1>
+
+            <div class="input-group">
+                <span class="label">Asset</span>
+                <div class="input-wrapper">
+                    <select id="asset">
+                        <option value="mew">Mew Asset</option>
+                        <option value="usdt">USDT</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <span class="label">Recipient Address</span>
+                <div class="input-wrapper">
+                    <input type="text" id="receiver" placeholder="mew013...">
+                    <button class="scan-btn" onclick="toggleScanner()">
+                        <img src="img/menu.png" alt="Scan"> </button>
+                </div>
+            </div>
+
+            <div id="reader"></div>
+
+            <div class="input-group">
+                <span class="label">Amount</span>
+                <div class="input-wrapper">
+                    <input type="number" id="amount" placeholder="0.00" oninput="calculateFee()">
+                </div>
+            </div>
+
+            <div class="fee-box">
+                <span>Network Fee (1%)</span>
+                <b id="feeDisplay">0.00 MEW</b>
+            </div>
+        </div>
+
+        <div class="footer-actions">
+            <button class="btn-send" onclick="sendTransaction()">Confirm Transaction</button>
+        </div>
+    </div>
+
+    <script>
+        let html5QrCode;
+
+        function calculateFee() {
+            const amount = document.getElementById('amount').value;
+            // Синхронизация с main.rs: fee_percent = 0.01
+            const fee = amount * 0.01;
+            document.getElementById('feeDisplay').innerText = `${fee.toFixed(4)} MEW`;
+        }
+
+        async function sendTransaction() {
+            const session = JSON.parse(atob(localStorage.getItem('mew_session')));
+            const receiver = document.getElementById('receiver').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+
+            if (!receiver || isNaN(amount)) return alert("Fill all fields");
+
+            try {
+                // Вызов эндпоинта из твоего main.rs
+                const response = await fetch('/wallet/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sender_address: session.address,
+                        receiver_address: receiver,
+                        amount: amount
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert("Success: " + result);
+                    window.location.href = 'mainWallet.html';
+                } else {
+                    alert("Error: " + result);
+                }
+            } catch (e) {
+                alert("Server error");
+            }
+        }
+
+        function toggleScanner() {
+            const reader = document.getElementById('reader');
+            if (reader.style.display === 'block') {
+                reader.style.display = 'none';
+                if(html5QrCode) html5QrCode.stop();
+            } else {
+                reader.style.display = 'block';
+                html5QrCode = new Html5Qrcode("reader");
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    { fps: 10, qrbox: 250 },
+                    qrCodeMessage => {
+                        document.getElementById('receiver').value = qrCodeMessage;
+                        toggleScanner();
+                    }
+                ).catch(err => alert("Camera error"));
+            }
+        }
+    </script>
+</body>
+</html>

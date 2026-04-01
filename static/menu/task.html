@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - Tasks</title>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --card: #121212;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container { width: 100%; max-width: 414px; }
+        
+        .header { margin-bottom: 30px; }
+        .back-link { color: var(--accent); text-decoration: none; font-size: 14px; }
+
+        h1 { font-size: 32px; margin: 10px 0; }
+
+        .task-card {
+            background: var(--card);
+            border: 1px solid #1a1a1a;
+            border-radius: 24px;
+            padding: 20px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .task-info h3 { margin: 0 0 4px 0; font-size: 18px; }
+        .task-info p { margin: 0; color: var(--text-dim); font-size: 14px; }
+        .reward { color: var(--accent); font-weight: 700; margin-top: 8px; display: block; }
+
+        .btn-go {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-go:disabled { background: #333; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="../menuWallet.html" class="back-link">← Back</a>
+            <h1>Tasks</h1>
+        </div>
+
+        <div class="task-card">
+            <div class="task-info">
+                <h3>Daily Faucet</h3>
+                <p>Claim your daily MEW drop</p>
+                <span class="reward">+10.0 MEW</span>
+            </div>
+            <button class="btn-go" onclick="location.href='faucet.html'">GO</button>
+        </div>
+
+        <div class="task-card">
+            <div class="task-info">
+                <h3>Watch Ad</h3>
+                <p>Support the network</p>
+                <span class="reward">+5.0 MEW</span>
+            </div>
+            <button class="btn-go" id="btn-ads" onclick="completeTask('ads_watch', 5.0)">CLAIM</button>
+        </div>
+    </div>
+
+    <script>
+        async function completeTask(taskId, rewardAmount) {
+            const sessionData = localStorage.getItem('mew_session');
+            if (!sessionData) return;
+            const session = JSON.parse(atob(sessionData));
+
+            const btn = document.activeElement;
+            btn.disabled = true;
+            btn.innerText = "...";
+
+            try {
+                const response = await fetch('/wallet/task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        address: session.address,
+                        task_id: taskId,
+                        reward: rewardAmount
+                    })
+                });
+
+                const data = await response.json();
+                alert(response.ok ? "Success!" : data);
+            } catch (e) {
+                alert("Error connecting to server");
+            } finally {
+                btn.innerText = "DONE";
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - Faucet</title>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --card: #121212;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 24px var(--safe-bottom) 24px;
+            box-sizing: border-box;
+        }
+
+        /* Header */
+        .header { height: 60px; display: flex; align-items: center; }
+        .back-btn { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
+
+        /* Content */
+        .main-content { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+        }
+
+        h1 { font-size: 34px; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -1.5px; }
+        .subtitle { color: var(--text-dim); font-size: 16px; margin-bottom: 40px; line-height: 1.5; }
+
+        /* Faucet Card */
+        .faucet-card {
+            background: linear-gradient(145deg, #121212 0%, #0a0a0a 100%);
+            border: 1px solid #1a1a1a;
+            border-radius: 32px;
+            padding: 50px 24px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .drop-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+            display: block;
+            filter: drop-shadow(0 0 15px rgba(168, 155, 242, 0.3));
+        }
+
+        .reward-amount {
+            font-size: 28px;
+            font-weight: 900;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .reward-amount span { color: var(--accent); }
+
+        .status-text {
+            color: var(--text-dim);
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 32px;
+            min-height: 20px;
+        }
+
+        /* Button */
+        .btn-claim {
+            width: 100%;
+            padding: 22px;
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 20px;
+            font-size: 18px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-claim:disabled {
+            background: #1a1a1a;
+            color: #444;
+            cursor: not-allowed;
+            transform: scale(1) !important;
+        }
+
+        .btn-claim:active:not(:disabled) { transform: scale(0.95); }
+
+        /* Toast Notification */
+        .toast-container {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            width: 90%;
+            max-width: 350px;
+            pointer-events: none;
+        }
+
+        .mew-toast {
+            background: #121212;
+            border: 1px solid var(--accent);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .mew-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast-icon {
+            width: 28px;
+            height: 28px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .toast-icon.err { background: #ff6b6b; }
+
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="header">
+            <a href="../menuWallet.html" class="back-btn">← MENU</a>
+        </div>
+
+        <div class="main-content">
+            <h1>Daily Faucet</h1>
+            <p class="subtitle">Claim your daily allowance of Mew tokens to explore the decentralized ecosystem.</p>
+
+            <div class="faucet-card">
+                <span class="drop-icon">💧</span>
+                <div class="reward-amount">10.00 <span>MEW</span></div>
+                <div class="status-text" id="statusLabel">Checking status...</div>
+                
+                <button class="btn-claim" id="claimBtn" onclick="handleClaim()">Claim Tokens</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastRoot"></div>
+
+    <script>
+        // Функция показа уведомления
+        function showMewToast(message, isError = false) {
+            const root = document.getElementById('toastRoot');
+            root.innerHTML = `
+                <div class="toast-container">
+                    <div class="mew-toast" id="activeToast">
+                        <div class="toast-icon ${isError ? 'err' : ''}">${isError ? '✕' : '✓'}</div>
+                        <div class="toast-text">${message}</div>
+                    </div>
+                </div>
+            `;
+            
+            setTimeout(() => {
+                const t = document.getElementById('activeToast');
+                if(t) t.classList.add('show');
+            }, 10);
+
+            setTimeout(() => {
+                const t = document.getElementById('activeToast');
+                if(t) {
+                    t.classList.remove('show');
+                    setTimeout(() => root.innerHTML = '', 400);
+                }
+            }, 4000);
+        }
+
+        // Обновление интерфейса (таймер)
+        async function updateState() {
+            const sessionData = localStorage.getItem('mew_session');
+            if (!sessionData) return;
+            
+            try {
+                const session = JSON.parse(atob(sessionData));
+                const response = await fetch(`/wallet/${session.address}`);
+                const stats = await response.json();
+                
+                const now = Math.floor(Date.now() / 1000);
+                const last = stats.last_claim || 0;
+                const cooldown = 86400; // 24 часа
+                const diff = now - last;
+
+                const btn = document.getElementById('claimBtn');
+                const label = document.getElementById('statusLabel');
+
+                if (diff < cooldown) {
+                    btn.disabled = true;
+                    const remaining = cooldown - diff;
+                    const h = Math.floor(remaining / 3600);
+                    const m = Math.floor((remaining % 3600) / 60);
+                    label.innerText = `Come back in ${h}h ${m}m`;
+                } else {
+                    btn.disabled = false;
+                    label.innerText = "Ready to drop";
+                }
+            } catch (e) {
+                console.error("Sync error:", e);
+            }
+        }
+
+        // Основная функция запроса
+        async function handleClaim() {
+            const sessionData = localStorage.getItem('mew_session');
+            if (!sessionData) {
+                showMewToast("Login required", true);
+                return;
+            }
+            
+            const session = JSON.parse(atob(sessionData));
+            const btn = document.getElementById('claimBtn');
+            const originalText = btn.innerText;
+
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+
+            try {
+                // Отправляем JSON, соответствующий структуре CompleteTaskRequest в Rust
+                const response = await fetch('/wallet/task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        address: session.address,
+                        task_id: "faucet_daily", // Без подчеркивания
+                        reward: 10.0             // Обязательное поле для десериализации
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMewToast("Success! 10 MEW received.");
+                    await updateState(); // Обновляем состояние кнопки сразу
+                } else {
+                    // Сервер возвращает текст ошибки (например, Cooldown active)
+                    showMewToast(data, true);
+                    await updateState();
+                }
+            } catch (e) {
+                showMewToast("Connection error", true);
+            } finally {
+                btn.innerText = originalText;
+            }
+        }
+
+        // Инициализация
+        updateState();
+        setInterval(updateState, 30000); // Проверка каждые 30 секунд
+    </script>
+</body>
+</html>

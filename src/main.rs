@@ -67,8 +67,8 @@ struct ImportRequest {
 #[derive(Deserialize)]
 struct CompleteTaskRequest {
     address: String,
-    _task_id: String, // ID задания (например, "adsgram_view")
-    reward: f64,     // Сумма награды
+    task_id: String, // Поле с подчеркиванием
+    reward: f64,      // Сумма награды
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -379,37 +379,67 @@ async fn complete_task(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CompleteTaskRequest>,
 ) -> Result<Json<String>, (axum::http::StatusCode, String)> {
+    let collection = "wallets";
+
+    // 1. Пытаемся получить текущую статистику кошелька
     let mut stats: WalletStats = state.db.fluent()
         .select()
-        .by_id_in("wallets")
+        .by_id_in(collection)
         .obj()
         .one(&payload.address)
         .await
-        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?
-        .ok_or((axum::http::StatusCode::NOT_FOUND, "Wallet not found".to_string()))?;
+        .map_err(|e| {
+            println!("Firestore Error: {:?}", e);
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Database connection error".into())
+        })?
+        .ok_or((axum::http::StatusCode::NOT_FOUND, "Wallet not found in system".into()))?;
 
-    // ПРОВЕРКА: 1 час = 3600 секунд
+    // 2. Логика проверки времени (Cooldown)
     let now = chrono::Utc::now().timestamp();
-    if now - stats.last_claim < 3600 {
-        let wait_min = (3600 - (now - stats.last_claim)) / 60;
-        return Err((axum::http::StatusCode::FORBIDDEN, format!("Wait {} min", wait_min)));
+    let cooldown_seconds = 86400; // 24 часа для крана. Если хочешь 1 час — ставь 3600.
+    
+    let seconds_passed = now - stats.last_claim;
+
+    if seconds_passed < cooldown_seconds {
+        let remaining = cooldown_seconds - seconds_passed;
+        let hours = remaining / 3600;
+        let mins = (remaining % 3600) / 60;
+        return Err((
+            axum::http::StatusCode::FORBIDDEN, 
+            format!("Cooldown active. Wait {}h {}m", hours, mins)
+        ));
     }
 
-    stats.balance += payload.reward;
-    stats.tasks_completed += 1;
-    stats.last_claim = now; // Фиксируем время нажатия
+    // 3. Определяем награду в зависимости от task_id
+    let reward = if payload.task_id == "faucet_daily" {
+        10.0 // Для крана игнорируем reward и ставим 10
+    } else {
+        payload.reward // А вот тут мы ЧИТАЕМ поле, и warning исчезнет!
+    };
 
-    let _: () = state.db.fluent()
+    // 4. Обновляем данные в структуре
+    stats.balance += reward;
+    stats.tasks_completed += 1;
+    stats.last_claim = now;
+
+    // 5. Сохраняем в Firestore (обновляем только нужные поля для безопасности)
+    state.db.fluent()
         .update()
-        .fields(paths!(WalletStats::{balance, tasks_completed, last_claim}))
-        .in_col("wallets")
+        .in_col(collection)
         .document_id(&payload.address)
         .object(&stats)
         .execute::<()>()
         .await
-        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to update stats".to_string()))?;
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to save data".into()))?;
 
-    Ok(Json(format!("Награда {} MEW зачислена", payload.reward)))
+    // 6. Отправляем красивое уведомление тебе в Telegram
+    let tg_msg = format!(
+        "💧 **Faucet Claimed!**\n\n👤 User: `{}`\n💰 Reward: `{} MEW`\n✅ Total Tasks: `{}`",
+        payload.address, reward, stats.tasks_completed
+    );
+    let _ = state.bot.send_message(state.chat_id.clone(), tg_msg).await;
+
+    Ok(Json(format!("Success! {} MEW added to your balance", reward)))
 }
 
 async fn create_group(

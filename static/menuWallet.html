@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - Menu</title>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --card: #121212;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            user-select: none;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 24px var(--safe-bottom) 24px;
+            box-sizing: border-box;
+        }
+
+        .header {
+            height: 60px;
+            display: flex;
+            align-items: center;
+        }
+
+        .back-btn { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+
+        .main-content { flex: 1; margin-top: 10px; }
+        h1 { font-size: 32px; font-weight: 800; margin: 0 0 30px 0; letter-spacing: -1px; }
+
+        /* Стили списка меню */
+        .menu-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .menu-item {
+            background: var(--card);
+            border: 1px solid #1a1a1a;
+            border-radius: 20px;
+            padding: 20px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .menu-item:active {
+            transform: scale(0.97);
+            background: #1a1a1a;
+            border-color: var(--accent);
+        }
+
+        .menu-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .menu-title {
+            color: var(--text);
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        .menu-desc {
+            color: var(--text-dim);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .menu-arrow {
+            color: var(--accent);
+            font-size: 20px;
+            font-weight: 300;
+        }
+
+        /* Особый стиль для внешних ссылок */
+        .external-badge {
+            font-size: 10px;
+            background: rgba(168, 155, 242, 0.1);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 6px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="header">
+            <a href="mainWallet.html" class="back-btn">← CLOSE</a>
+        </div>
+
+        <div class="main-content">
+            <h1>Menu</h1>
+            
+            <div class="menu-list">
+                <a href="menu/staking.html" class="menu-item">
+                    <div class="menu-info">
+                        <span class="menu-title">Staking</span>
+                        <span class="menu-desc">Earn 7% APY on your assets</span>
+                    </div>
+                    <span class="menu-arrow">→</span>
+                </a>
+
+                <a href="menu/faucet.html" class="menu-item">
+                    <div class="menu-info">
+                        <span class="menu-title">Faucets</span>
+                        <span class="menu-desc">Get free test tokens daily</span>
+                    </div>
+                    <span class="menu-arrow">→</span>
+                </a>
+
+                <a href="menu/task.html" class="menu-item">
+                    <div class="menu-info">
+                        <span class="menu-title">Tasks</span>
+                        <span class="menu-desc">Complete missions for rewards</span>
+                    </div>
+                    <span class="menu-arrow">→</span>
+                </a>
+
+                <a href="https://t.me/mewChain_publicBlockchain" target="_blank" class="menu-item">
+                    <div class="menu-info">
+                        <span class="menu-title">Blockchain<span class="external-badge">TG</span></span>
+                        <span class="menu-desc">View public ledger & updates</span>
+                    </div>
+                    <span class="menu-arrow">↗</span>
+                </a>
+
+                <a href="menu/info.html" class="menu-item">
+                    <div class="menu-info">
+                        <span class="menu-title">FAQ's</span>
+                        <span class="menu-desc">Help center and info</span>
+                    </div>
+                    <span class="menu-arrow">→</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

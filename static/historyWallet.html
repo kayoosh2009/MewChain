@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - History</title>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --card: #121212;
+            --green: #4CAF50;
+            --red: #FF6B6B;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 24px var(--safe-bottom) 24px;
+            box-sizing: border-box;
+        }
+
+        .header {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 10;
+        }
+
+        .back-btn { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+
+        .main-content { flex: 1; margin-top: 10px; }
+        h1 { font-size: 32px; font-weight: 800; margin: 0 0 24px 0; letter-spacing: -1px; }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .tx-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #111;
+        }
+
+        .tx-info { display: flex; align-items: center; gap: 12px; }
+        
+        .tx-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: var(--card);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+        }
+
+        .tx-details h4 { margin: 0; font-size: 16px; font-weight: 600; }
+        .tx-details p { margin: 2px 0 0 0; font-size: 12px; color: var(--text-dim); font-family: monospace; }
+
+        .tx-amount { text-align: right; }
+        .tx-amount h4 { margin: 0; font-size: 16px; font-weight: 700; }
+        .tx-amount p { margin: 2px 0 0 0; font-size: 11px; color: var(--text-dim); }
+
+        .empty-state {
+            text-align: center;
+            margin-top: 100px;
+            color: var(--text-dim);
+        }
+
+        .type-in { color: var(--green); }
+        .type-out { color: var(--text); }
+
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="header">
+            <a href="mainWallet.html" class="back-btn">← WALLET</a>
+            <span style="font-size: 12px; font-weight: 800; color: #222;">EXPLORER</span>
+        </div>
+
+        <div class="main-content">
+            <h1>Activity</h1>
+            
+            <div id="historyContainer" class="history-list">
+                <div class="empty-state" id="loader">Loading transactions...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadHistory() {
+            const sessionData = localStorage.getItem('mew_session');
+            if (!sessionData) return;
+            
+            const session = JSON.parse(atob(sessionData));
+            const myAddress = session.address;
+            const container = document.getElementById('historyContainer');
+
+            try {
+                // Тянем блоки из main.rs
+                const response = await fetch('/blocks');
+                const blocks = await response.json();
+                
+                let html = '';
+                let hasTransactions = false;
+
+                // Перебираем блоки и ищем транзакции пользователя
+                blocks.reverse().forEach(block => {
+                    block.transactions.forEach(tx => {
+                        if (tx.sender === myAddress || tx.receiver === myAddress) {
+                            hasTransactions = true;
+                            const isIncoming = tx.receiver === myAddress;
+                            const displayAddr = isIncoming ? tx.sender : tx.receiver;
+                            const shortAddr = displayAddr.substring(0, 8) + '...' + displayAddr.slice(-4);
+                            
+                            html += `
+                                <div class="tx-item">
+                                    <div class="tx-info">
+                                        <div class="tx-icon">${isIncoming ? '⇣' : '⇡'}</div>
+                                        <div class="tx-details">
+                                            <h4>${isIncoming ? 'Received' : 'Sent'}</h4>
+                                            <p>${shortAddr}</p>
+                                        </div>
+                                    </div>
+                                    <div class="tx-amount">
+                                        <h4 class="${isIncoming ? 'type-in' : 'type-out'}">
+                                            ${isIncoming ? '+' : '-'}${tx.amount.toFixed(2)} MEW
+                                        </h4>
+                                        <p>${new Date(block.timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    });
+                });
+
+                if (!hasTransactions) {
+                    container.innerHTML = '<div class="empty-state">No transactions yet</div>';
+                } else {
+                    container.innerHTML = html;
+                }
+
+            } catch (e) {
+                container.innerHTML = '<div class="empty-state">Error loading history</div>';
+            }
+        }
+
+        loadHistory();
+    </script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MewChain - Staking</title>
+    <style>
+        :root {
+            --accent: #A89BF2;
+            --bg: #050505;
+            --text: #FFFFFF;
+            --text-dim: #666666;
+            --card: #121212;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .mobile-viewport {
+            width: 100%;
+            max-width: 414px;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-top) 24px var(--safe-bottom) 24px;
+            box-sizing: border-box;
+        }
+
+        .header { height: 60px; display: flex; align-items: center; }
+        .back-btn { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+
+        .main-content { flex: 1; margin-top: 10px; }
+        h1 { font-size: 32px; font-weight: 800; margin: 0 0 8px 0; letter-spacing: -1px; }
+        .subtitle { color: var(--text-dim); font-size: 15px; margin-bottom: 30px; }
+
+        /* Карточка стейкинга */
+        .stake-card {
+            background: linear-gradient(145deg, #121212 0%, #080808 100%);
+            border: 1px solid #1a1a1a;
+            padding: 30px 20px;
+            border-radius: 28px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .apy-badge {
+            background: rgba(168, 155, 242, 0.1);
+            color: var(--accent);
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            display: inline-block;
+            margin-bottom: 16px;
+        }
+
+        .earned-label { color: var(--text-dim); font-size: 14px; margin-bottom: 8px; }
+        .earned-amount { font-size: 36px; font-weight: 800; color: var(--text); margin: 0; }
+        .earned-mew { color: var(--accent); font-size: 18px; margin-left: 5px; }
+
+        /* Инфо-сетка */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-box {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 20px;
+            border: 1px solid #1a1a1a;
+        }
+
+        .stat-box span { color: var(--text-dim); font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 4px; }
+        .stat-box b { font-size: 16px; color: var(--text); }
+
+        .info-footer {
+            margin-top: auto;
+            background: rgba(255,255,255,0.03);
+            padding: 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-dim);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-viewport">
+        <div class="header">
+            <a href="../menuWallet.html" class="back-btn">← BACK</a>
+        </div>
+
+        <div class="main-content">
+            <h1>Staking</h1>
+            <p class="subtitle">Your Mew assets are automatically working for you.</p>
+
+            <div class="stake-card">
+                <div class="apy-badge">7.00% APY ACTIVE</div>
+                <div class="earned-label">Total APY Earned</div>
+                <h2 class="earned-amount" id="apyEarned">0.0000<span class="earned-mew">MEW</span></h2>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span>Staked Balance</span>
+                    <b id="stakedBalance">0.00 MEW</b>
+                </div>
+                <div class="stat-box">
+                    <span>Daily Profit</span>
+                    <b id="dailyProfit">~0.00 MEW</b>
+                </div>
+            </div>
+
+            <div class="info-footer">
+                Staking in MewChain is <b>liquid</b>. You don't need to lock your funds. Rewards are calculated every time you interact with the network or check your balance.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function updateStakingStats() {
+            const sessionData = localStorage.getItem('mew_session');
+            if (!sessionData) return;
+            const session = JSON.parse(atob(sessionData));
+
+            try {
+                // Запрос к эндпоинту /wallet/:address из main.rs
+                const response = await fetch(`/wallet/${session.address}`);
+                if (response.ok) {
+                    const stats = await response.json();
+                    
+                    // Выводим накопленный APY
+                    document.getElementById('apyEarned').innerHTML = 
+                        `${stats.apy_earned.toFixed(6)}<span class="earned-mew">MEW</span>`;
+                    
+                    // Выводим текущий баланс
+                    document.getElementById('stakedBalance').innerText = 
+                        `${stats.balance.toFixed(2)} MEW`;
+
+                    // Считаем примерную прибыль в день (7% / 365)
+                    const daily = (stats.balance * 0.07) / 365;
+                    document.getElementById('dailyProfit').innerText = `~${daily.toFixed(4)} MEW`;
+                }
+            } catch (e) {
+                console.error("Staking update error");
+            }
+        }
+
+        // Обновляем раз в 5 секунд для эффекта "живого" баланса
+        updateStakingStats();
+        setInterval(updateStakingStats, 5000);
+    </script>
+</body>
+</html>  

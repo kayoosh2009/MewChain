@@ -63,7 +63,8 @@ struct SendRequest {
 // Структура для принятия ключа из JSON
 #[derive(Deserialize)]
 struct ImportRequest {
-    secret_key: String,
+    secret_key: Option<String>, // Теперь необязательный
+    mnemonic: Option<String>,   // 👈 добавили
 }
 
 #[derive(Deserialize)]
@@ -265,8 +266,26 @@ async fn import_wallet(
     Json(payload): Json<ImportRequest>,
 ) -> Result<Json<MewWallet>, (axum::http::StatusCode, String)> {
     // 1. Пытаемся восстановить кошелек из ключа
-    let wallet = MewWallet::import_from_secret(&payload.secret_key)
-        .map_err(|e| (axum::http::StatusCode::BAD_REQUEST, e))?;
+    let wallet = if let Some(mnemonic_str) = &payload.mnemonic {
+        // Если пришла мнемоника — конвертируем её в ключ
+        let mnemonic = Mnemonic::from_phrase(mnemonic_str)
+            .map_err(|_| (axum::http::StatusCode::BAD_REQUEST, "Invalid mnemonic".to_string()))?;
+        let entropy = mnemonic.to_entropy();
+        let bytes: [u8; 32] = {
+            let mut arr = [0u8; 32];
+            arr[..16].copy_from_slice(&entropy[..16]);
+            arr
+        };
+        let secret_hex = hex::encode(bytes);
+        MewWallet::import_from_secret(&secret_hex)
+            .map_err(|e| (axum::http::StatusCode::BAD_REQUEST, e))?
+    } else if let Some(secret_key) = &payload.secret_key {
+        // Если пришел hex ключ напрямую
+        MewWallet::import_from_secret(secret_key)
+            .map_err(|e| (axum::http::StatusCode::BAD_REQUEST, e))?
+    } else {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "Provide mnemonic or secret_key".to_string()));
+    };
 
     // 2. Проверяем, есть ли он в базе, если нет — создаем начальные статы
     let _: () = state.db.fluent()

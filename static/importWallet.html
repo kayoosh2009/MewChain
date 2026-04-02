@@ -160,7 +160,7 @@
                 const response = await fetch('/wallet/import', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ secret_key: btoa(input).substring(0, 64) }) // Временный хак для совместимости с ED25519
+                    body: JSON.stringify({ mnemonic: input })
                 });
 
                 if (response.ok) {

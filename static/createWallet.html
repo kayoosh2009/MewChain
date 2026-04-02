@@ -166,28 +166,30 @@
 
     <script>
         // Список слов (в идеале тянется с бэкенда или генерится библиотекой)
-        const demoWords = ["cat", "crypto", "mew", "node", "chain", "digital", "future", "wallet", "block", "secure", "alpha", "asset"];
         let generatedAddress = "";
         let generatedSecret = "";
 
         function init() {
-            const container = document.getElementById('mnemonicContainer');
-            demoWords.forEach((word, index) => {
-                container.innerHTML += `<div class="word-chip"><span>${index + 1}</span>${word}</div>`;
-            });
-            
-            // Сразу запрашиваем реальный адрес у бэкенда Rust
+            // Запрашиваем кошелёк с сервера
             fetch('/wallet/new')
                 .then(res => res.json())
                 .then(data => {
                     generatedAddress = data.address;
                     generatedSecret = data.secret_key;
+                    generatedMnemonic = data.mnemonic;
+
+                    // Разбиваем secret_key на кусочки по 8 символов
+                    // Например: "a1b2c3d4 e5f6a7b8 ..." — так легче записать
+                const words = data.mnemonic.split(" ");
+                const container = document.getElementById('mnemonicContainer');
+                words.forEach((word, index) => {
+                    container.innerHTML += `<div class="word-chip"><span>${index + 1}</span>${word}</div>`;
                 });
+            });
         }
 
         function copyMnemonic() {
-            const text = demoWords.join(" ");
-            navigator.clipboard.writeText(text);
+            navigator.clipboard.writeText(generatedMnemonic);
             alert("Copied!");
         }
 

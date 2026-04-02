@@ -158,9 +158,21 @@
                     </div>
                     <span class="menu-arrow">→</span>
                 </a>
-            </div>
-        </div>
-    </div>
 
+                <a onclick="logout()" class="menu-item" style="cursor:pointer; border-color: #3a1a1a;">
+                    <div class="menu-info">
+                        <span class="menu-title" style="color: #ff4d4d;">Log Out</span>
+                        <span class="menu-desc">Clear session and exit wallet</span>
+                    </div>
+                    <span class="menu-arrow" style="color: #ff4d4d;">→</span>
+                </a>
+            </div>
+
+    <script>
+        function logout() {
+            localStorage.removeItem('mew_session');
+            window.location.href = 'index.html';
+        }
+    </script>
 </body>
 </html>

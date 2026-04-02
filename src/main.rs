@@ -8,6 +8,7 @@ use teloxide::prelude::*;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
 use tower_http::services::ServeDir;
+use bip39::Mnemonic;
 
 // --- МОДЕЛИ ДАННЫХ ---
 
@@ -34,6 +35,7 @@ struct MewWallet {
     address: String,
     public_key: String,
     secret_key: String,
+    mnemonic: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -102,11 +104,16 @@ impl MewWallet {
 
         let pub_hex = hex::encode(verifying_key.as_bytes());
         let sec_hex = hex::encode(signing_key.to_bytes());
-        
+
+        // Генерируем мнемонику из байт секретного ключа
+        let mnemonic = Mnemonic::from_entropy(&signing_key.as_bytes()[..16])
+            .expect("Failed to generate mnemonic");
+
         MewWallet {
-            address: format!("mew013{}", &pub_hex[..24]), // Твой формат адреса
+            address: format!("mew013{}", &pub_hex[..24]),
             public_key: pub_hex,
             secret_key: sec_hex,
+            mnemonic: mnemonic.to_string(),
         }
     }
 
@@ -124,6 +131,7 @@ impl MewWallet {
             address: format!("mew013{}", &pub_hex[..24]),
             public_key: pub_hex,
             secret_key: secret_hex.to_string(),
+            mnemonic: String::new(),
         })
     }
 }
@@ -284,7 +292,7 @@ async fn send_tokens(
     Json(payload): Json<SendRequest>,
 ) -> Result<Json<String>, (axum::http::StatusCode, String)> {
     // 1. Константы для экономики
-    let admin_address = "mew013_ТВОЙ_АДРЕС_ТУТ"; // Замени на свой реальный адрес
+    let admin_address = "mew013bd9e3841228b5bc1c6f4c304";// Замени на свой реальный адрес
     let fee_percent = 0.01; // 1% комиссия
     let fee = payload.amount * fee_percent;
     let total_deduction = payload.amount + fee;

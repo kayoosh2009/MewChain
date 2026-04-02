@@ -8,7 +8,7 @@ use teloxide::prelude::*;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
 use tower_http::services::ServeDir;
-use bip39::Mnemonic;
+use bip39::{Mnemonic, Language};
 
 // --- МОДЕЛИ ДАННЫХ ---
 
@@ -268,7 +268,7 @@ async fn import_wallet(
     // 1. Пытаемся восстановить кошелек из ключа
     let wallet = if let Some(mnemonic_str) = &payload.mnemonic {
         // Если пришла мнемоника — конвертируем её в ключ
-        let mnemonic = Mnemonic::from_phrase(mnemonic_str)
+        let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str)
             .map_err(|_| (axum::http::StatusCode::BAD_REQUEST, "Invalid mnemonic".to_string()))?;
         let entropy = mnemonic.to_entropy();
         let bytes: [u8; 32] = {
